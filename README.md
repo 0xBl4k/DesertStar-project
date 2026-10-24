@@ -1,2 +1,2 @@
 # DesertStar-project
-nothing to say
+this project is about lunar idk something
