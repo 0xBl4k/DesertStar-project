@@ -1,6 +1,6 @@
 import glob
 import numpy as np
-import spicepy as spice
+import spiceypy as spice
 import matplotlib.pyplot as plt
 
 # Setup 

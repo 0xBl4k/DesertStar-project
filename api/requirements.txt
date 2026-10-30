@@ -1,6 +1,7 @@
 fastapi
 uvicorn[standard]
 numpy
-spicepy
+spiceypy
 pydantic
+rasterio
 pytest #remove before deplyoing DONT FORGET RAAHHH
