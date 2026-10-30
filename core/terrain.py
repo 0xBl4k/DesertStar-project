@@ -8,8 +8,11 @@ from rasterio.crs import CRS
 from rasterio.warp import transform as rtransform
 from sunlib import FRAME          # importing sunlib also loads the kernels
 
+# ---------- Choose the site (part of the DEM file name) ----------
+SITE = "Site01"                   # use "Shoemaker" to redo Shoemaker
+
 # ---------- Open the 5 m patch ----------
-files = glob.glob("dem/*surf*")
+files = glob.glob(f"dem/*{SITE}*surf*")
 print("Found:", files)
 src = rasterio.open(files[0])
 dem = src.read(1).astype(float)
@@ -19,7 +22,7 @@ px = src.transform.a
 print("Size:", src.shape, " pixel (m):", px)
 
 plt.imshow(dem, cmap="gray")
-plt.title("Terrain patch (close this window to continue)")
+plt.title(f"{SITE} terrain patch (close this window to continue)")
 plt.colorbar(label="Height (m)")
 plt.show()
 
@@ -84,13 +87,13 @@ def analyse(row, col, label, plot=False):
         "lit_percent_if_flat": round(100 * float(np.mean(el > 0)), 1),
         "longest_dark_hours": int(longest_run(frac == 0)),
     }
-    print(label, f"(lat {lat:.3f}, lon {lon:.3f}, height {dem[row, col]:.0f} m):", stats)
+    print(f"{SITE} {label} (lat {lat:.3f}, lon {lon:.3f}, height {dem[row, col]:.0f} m):", stats)
 
     if plot:
         plt.plot(range(360), p)
         plt.xlabel("Azimuth (deg)")
         plt.ylabel("Horizon elevation (deg)")
-        plt.title(f"Horizon: {label}")
+        plt.title(f"Horizon: {SITE} {label}")
         plt.show()
         n = 30 * 24
         plt.plot(np.arange(n) / 24, el[:n], label="Sun elevation")
@@ -98,15 +101,15 @@ def analyse(row, col, label, plot=False):
         plt.xlabel("Days from start")
         plt.ylabel("Degrees")
         plt.legend()
-        plt.title(label)
+        plt.title(f"{SITE} {label}")
         plt.show()
 
-    out = {"name": label, "lat": lat, "lon": lon, "obs_height_m": 2.0,
+    out = {"name": f"{SITE} {label}", "lat": lat, "lon": lon, "obs_height_m": 2.0,
            "horizon_deg": [round(float(v), 2) for v in p], "stats_one_year": stats}
-    json.dump(out, open(f"horizon_{label.replace(' ', '_')}.json", "w"))
+    json.dump(out, open(f"horizon_{SITE}_{label.replace(' ', '_')}.json", "w"))
 
 # ---------- Run it on three points ----------
 analyse(src.height // 2, src.width // 2, "center", plot=True)
 analyse(*np.unravel_index(np.nanargmin(dem), dem.shape), "lowest point")
 analyse(*np.unravel_index(np.nanargmax(dem), dem.shape), "highest point")
-print("Saved 3 JSON files")
+print("Saved 3 JSON files for", SITE)
