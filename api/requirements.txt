@@ -1,2 +1,6 @@
 fastapi
 uvicorn[standard]
+numpy
+spicepy
+pydantic
+pytest #remove before deplyoing DONT FORGET RAAHHH
