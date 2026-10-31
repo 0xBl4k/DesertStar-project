@@ -1,10 +1,13 @@
 import glob
 import json
+from pathlib import Path
 from datetime import datetime, timedelta
 import numpy as np
 
+ROOT = Path(__file__).resolve().parents[1]
+eph = json.loads((ROOT / "data" / "ephemeris.json").read_text())
+
 R_MOON = 1737.4
-eph = json.load(open("ephemeris.json"))
 STEP_H = eph["step_s"] / 3600
 START = datetime.fromisoformat(eph["start_utc"])
 SUN = np.array(eph["sun_km"], dtype=float)
@@ -61,27 +64,28 @@ def report(path, now_utc):
         for kind, t in nxt:
             print(f"   next {name.lower()}{kind}: {when(t)} UTC  (in {t - now_h:.1f} h)")
 
-NOW = "2026-11-14T12:00:00"
-for f in sorted(glob.glob("horizon_*.json")):
-    report(f, NOW)
+if '__main__' == __name__:
+    NOW = "2026-11-14T12:00:00"
+    for f in sorted(glob.glob("horizon_*.json")):
+        report(f, NOW)
 
-# ---------- Check: does the JSON pipeline match SPICE? ----------
+    # ---------- Check: does the JSON pipeline match SPICE? ----------
 
-from sunlib import elevation_azimuth
-site = json.load(open("horizon_center.json"))
-h = 324.37                                    # an off-grid time, 22 min 12 s past the hour
-i = int(h); f = h - i
-v = SUN[i] * (1 - f) + SUN[i + 1] * f         # linear interpolation, as the web app will do
-el, az = directions(np.array([v]), site["lat"], site["lon"])
-utc = (START + timedelta(hours=h)).strftime("%Y-%m-%d %H:%M:%S")
-true_el, true_az = elevation_azimuth("SUN", site["lat"], site["lon"], utc)
-print(f"\nCheck vs SPICE at {utc}: elevation diff {abs(el[0] - true_el):.4f} deg, "
-      f"azimuth diff {abs(az[0] - true_az):.4f} deg")
+    from sunlib import elevation_azimuth
+    site = json.load(open("horizon_center.json"))
+    h = 324.37                                    # an off-grid time, 22 min 12 s past the hour
+    i = int(h); f = h - i
+    v = SUN[i] * (1 - f) + SUN[i + 1] * f         # linear interpolation, as the web app will do
+    el, az = directions(np.array([v]), site["lat"], site["lon"])
+    utc = (START + timedelta(hours=h)).strftime("%Y-%m-%d %H:%M:%S")
+    true_el, true_az = elevation_azimuth("SUN", site["lat"], site["lon"], utc)
+    print(f"\nCheck vs SPICE at {utc}: elevation diff {abs(el[0] - true_el):.4f} deg, "
+        f"azimuth diff {abs(az[0] - true_az):.4f} deg")
 
-# ---------- Sun AND Earth both up ----------
-for f in sorted(glob.glob("horizon_*.json")):
-    site = json.load(open(f))
-    ms, me = margin(site, SUN), margin(site, EARTH)
-    both = (ms > 0) & (me > 0)
-    print(f"{site['name']}: Sun and Earth both up {100*np.mean(both):.1f}% of the year, "
-          f"longest stretch without both {longest_run(~both):.0f} h")
+    # ---------- Sun AND Earth both up ----------
+    for f in sorted(glob.glob("horizon_*.json")):
+        site = json.load(open(f))
+        ms, me = margin(site, SUN), margin(site, EARTH)
+        both = (ms > 0) & (me > 0)
+        print(f"{site['name']}: Sun and Earth both up {100*np.mean(both):.1f}% of the year, "
+            f"longest stretch without both {longest_run(~both):.0f} h")
