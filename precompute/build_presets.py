@@ -1,5 +1,5 @@
 """Writes one JSON file per preset site into frontend/data/presets/.
-Run from the repo root:  python -m precompute.build_presets
+# under development :)
 """
 import json
 from datetime import datetime

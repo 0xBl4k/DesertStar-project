@@ -3,8 +3,8 @@ from pydantic import BaseModel, Field, model_validator
 from typing import Literal
 
 # more samples more detailed movement and visibility data slower calculation, and the opposite is correct
-MAX_DURATION_DAYS = 90
-MAX_SAMPLES = 5000 # safeguard 
+MAX_DURATION_DAYS = 365
+MAX_SAMPLES = 10_000 # safeguard 
 class VisibilityRequest(BaseModel):
     mode: Literal["preset", "custom"]
     site_id: str | None = None
@@ -36,7 +36,7 @@ class VisibilityRequest(BaseModel):
         
         duration = self.end_utc - self.start_utc
         if duration > timedelta(days=MAX_DURATION_DAYS):
-            raise ValueError("Maximum duration is 90 days") # checks for a duration between two dates
+            raise ValueError("Maximum duration is 365 days") # checks for a duration between two dates
         
         samples = (duration.total_seconds() // (self.step_minutes * 60)) + 1
         
