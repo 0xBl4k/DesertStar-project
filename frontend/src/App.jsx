@@ -19,34 +19,6 @@ const showVisibility=v=>v==null?'Not calculated':v?'Visible':'Obstructed';
 const icon=(Icon,size=16)=> <Icon size={size} strokeWidth={1.8} aria-hidden="true"/>;
 function SiteBadge({children,kind='blue'}){return <span className={'chip chip-'+kind}>{children}</span>}
 
-function SolarClock({data,elapsed,anchor,referenceTime}){
- // Clock metaphor only: the two objects DO NOT physically orbit the Moon.
- // Their elevation readings come from the DesertStar FastAPI ephemeris.
- const ref=useRef(null),[dims,setDims]=useState({w:660,h:440});
- useEffect(()=>{if(!ref.current)return;const node=ref.current;
-  const resize=()=>setDims({w:node.clientWidth||660,h:node.clientHeight||440});
-  resize();const observer=new ResizeObserver(resize);observer.observe(node);return()=>observer.disconnect();},[]);
- const {w,h}=dims,cx=w/2,cy=h/2;
- const limit=Math.min(w*.49,h*.49);
- const sunR=limit*.97,earthR=limit*.82;
- const refTime=referenceTime ? new Date(referenceTime).getTime() : 0;
- const clockHours=Number.isFinite(refTime)?refTime/3600000+elapsed:elapsed;
- const sunA=-Math.PI/2+clockHours*Math.PI/36+(data?.sun?.azimuth??0)*Math.PI/3600;
- const earthA=sunA+1.65+.10*Math.sin(clockHours*Math.PI/72)+(data?.earth?.azimuth??0)*Math.PI/5400;
- const sp={x:cx+sunR*Math.cos(sunA),y:cy+sunR*Math.sin(sunA)};
- const ep={x:cx+earthR*Math.cos(earthA),y:cy+earthR*Math.sin(earthA)};
- const pin={x:(anchor?.x??50)*w/100,y:(anchor?.y??67)*h/100};
- return <div className="solar-clock" ref={ref} aria-label="Schematic celestial direction visualization, not physical orbits">
-   <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" className="clock-lines" aria-hidden="true">
-     <path d={`M ${pin.x} ${pin.y} L ${sp.x} ${sp.y}`} className="ray-sun"/>
-     <path d={`M ${pin.x} ${pin.y} L ${ep.x} ${ep.y}`} className="ray-earth"/>
-   </svg>
-   <div className="sky-body sun" style={{left:sp.x,top:sp.y}}><span className="sun-orb"/><span className="celestial-reading"><b>SUN</b><small>{fmtAngle(data?.sun?.altitude)}</small></span></div>
-   <div className="sky-body earth" style={{left:ep.x,top:ep.y}}><span className="earth-orb"/><span className="celestial-reading"><b>EARTH</b><small>{fmtAngle(data?.earth?.altitude)}</small></span></div>
-   <div className={`sky-comms ${data?.mode==='geometry'?'geometry':data?.earthVisible===true?'available':'blocked'}`}><span className="mini-dot"/> {data?.mode==='geometry'?'EARTH / LEVEL HORIZON':'EARTH LINE OF SIGHT'} <b>{data?.mode==='geometry'?(data.earthVisible==null?'DATA UNAVAILABLE':data.earthVisible?'ABOVE 0° · TERRAIN UNKNOWN':'BELOW 0°'):data?.earthVisible==null?'TERRAIN NOT ANALYZED':data.earthVisible?'POSSIBLE':'BLOCKED BY TERRAIN'}</b></div>
-   <div className="sky-pin" style={{left:pin.x,top:pin.y}} aria-hidden="true"/>
- </div>;
-}
 // A site name is revealed only AFTER its yellow marker is clicked.
 // The label itself is the second, explicit action that opens mission details.
 function PlaceLabels({sites,positions,revealedId,onSelect}){
@@ -74,17 +46,16 @@ function PlaceLabels({sites,positions,revealedId,onSelect}){
  </div>;
 }
 function GlobeStage({sites,activeId,compareIds=[],onSelect,modelUrl,modelStatus,onLoaded,onError,compact=false,clock=false,data,elapsed=0,date,time,moonView="default",customPickSite=null,onSurfaceSelect,onPickedDetails,focusOnSite=false}){
- const [anchor,setAnchor]=useState(null);
  const [positions,setPositions]=useState(null);
  const [revealedId,setRevealedId]=useState(null);
  const sceneSites=useMemo(()=>customPickSite?[...sites.filter(s=>s.id!==customPickSite.id),customPickSite]:sites,[sites,customPickSite]);
- useEffect(()=>{setAnchor(null);setRevealedId(null)},[activeId]);
+ useEffect(()=>{setRevealedId(null)},[activeId]);
  useEffect(()=>{if(customPickSite)setRevealedId(customPickSite.id)},[customPickSite]);
  return <section className={`globe-stage ${compact?'compact':''} ${clock?'has-clock':''}`} aria-label="Interactive NASA Moon view">
   <div className="stage-upper"><span className="eyebrow">NASA / LRO · 3D MOON</span><span className="stage-gesture">{icon(Mouse,16)} <b>Drag</b> to rotate <span>·</span> <b>Double-click</b> to resize <span>·</span> Select a gold dot</span></div>
   <div className="scene-area">
-    {clock && <SolarClock data={data} elapsed={elapsed} anchor={anchor} referenceTime={`${date||INITIAL_DATE}T${time||INITIAL_TIME}:00Z`}/>}
-    <MoonScene modelUrl={modelUrl} onModelLoaded={onLoaded} onModelError={onError} sites={sceneSites} activeId={activeId} compareIds={compareIds} onSelect={setRevealedId} onSurfaceSelect={onSurfaceSelect} zoomable={true} clockScene={clock} viewMode={moonView} focusOnSite={focusOnSite} onAnchor={clock?setAnchor:undefined} onPositions={setPositions}/>
+    {clock&&<div className="sky3d-legend" aria-label="Three-dimensional celestial direction guide"><b>3D SUN / EARTH</b><span><i className="legend-sun"/> Sun direction <i className="legend-earth"/> Earth direction</span><small>Local axes: E red · N cyan · Up green</small><small>Display sizes/distances not to scale</small></div>}
+    <MoonScene modelUrl={modelUrl} onModelLoaded={onLoaded} onModelError={onError} sites={sceneSites} activeId={activeId} compareIds={compareIds} onSelect={setRevealedId} onSurfaceSelect={onSurfaceSelect} zoomable={true} clockScene={clock} skyData={data} viewMode={moonView} focusOnSite={focusOnSite} onPositions={setPositions}/>
     <PlaceLabels sites={sceneSites} positions={positions} revealedId={revealedId} onSelect={id=>id===customPickSite?.id?onPickedDetails?.():onSelect(id)}/>
   </div>
  </section>
