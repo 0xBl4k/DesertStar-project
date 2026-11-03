@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {localFrame,siteSurfacePosition,directionFromAzEl,sceneGeometry,MOON_SCENE_RADIUS} from '../src/lunarSceneMath.js';
+import {localFrame,siteSurfacePosition,directionFromAzEl,sceneGeometry,previewSkyAt,MOON_SCENE_RADIUS} from '../src/lunarSceneMath.js';
 
 const near=(actual,expected,eps=1e-9)=>{
  assert.equal(actual.length,expected.length);
@@ -48,4 +48,14 @@ test('scene rejects missing/nonfinite coordinates while science is loading',()=>
  assert.equal(sceneGeometry({lat:-85,lon:0},{sun:{altitude:null,azimuth:0},earth:{altitude:0,azimuth:0}}),null);
  assert.equal(sceneGeometry({lat:95,lon:0},{sun:{altitude:0,azimuth:0},earth:{altitude:0,azimuth:0}}),null);
  assert.equal(sceneGeometry({lat:-85,lon:0},{sun:{altitude:0,azimuth:NaN},earth:{altitude:0,azimuth:0}}),null);
+});
+
+test('frontend-only preview changes with selected UTC time and remains finite',()=>{
+ const first=previewSkyAt('2026-11-24','12:00',0);
+ const later=previewSkyAt('2026-11-24','12:00',6);
+ assert.notDeepEqual(first,later);
+ assert.deepEqual(later,previewSkyAt('2026-11-24','18:00',0));
+ const geo=sceneGeometry({lat:-89,lon:20},first);
+ assert.ok(geo);
+ for(const coords of [geo.sunPosition,geo.earthPosition])assert.ok(coords.every(Number.isFinite));
 });
