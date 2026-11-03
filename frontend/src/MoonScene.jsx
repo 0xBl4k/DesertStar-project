@@ -29,6 +29,7 @@ function Demo(){
  return <mesh><sphereGeometry args={[1.96,96,64]}/><meshStandardMaterial map={map} roughness={1} metalness={0}/></mesh>;
 }
 function markerPosition(site){
+ if(Array.isArray(site.worldPoint)&&site.worldPoint.length===3)return new Vector3(...site.worldPoint).normalize().multiplyScalar(1.985);
  const x=site.pin?.[0]??0,y=site.pin?.[1]??0;
  return new Vector3(x*1.9,y*1.9,Math.sqrt(Math.max(.01,1-x*x-y*y))*1.985);
 }
@@ -60,7 +61,7 @@ function MarkerTracker({sites,activeId,onPositions,onAnchor}){
     const x=(projected.x+1)*size.width/2,y=(1-projected.y)*size.height/2;
     return {id,x:Math.round(x),y:Math.round(y),visible:front&&x>=5&&x<=size.width-5&&y>=5&&y<=size.height-5};
   });
-  const signature=`${size.width}:${size.height}|`+coords.map(p=>`${p.id}:${p.x}:${p.y}:${+p.visible}`).join('|');
+  const signature=`${activeId}:${size.width}:${size.height}|`+coords.map(p=>`${p.id}:${p.x}:${p.y}:${+p.visible}`).join('|');
   if(signature===previous.current)return;
   previous.current=signature;
   onPositions?.({points:coords,width:size.width,height:size.height});
@@ -68,6 +69,22 @@ function MarkerTracker({sites,activeId,onPositions,onAnchor}){
   if(active&&onAnchor)onAnchor({x:MathUtils.clamp(active.x/size.width*100,2,98),y:MathUtils.clamp(active.y/size.height*100,2,98)});
  });
  return null;
+}
+function CameraFocus({site,enabled}){
+ const {camera,controls}=useThree();
+ const destination=useRef(null),latest=useRef(null);
+ useEffect(()=>{if(!enabled||!site||latest.current===site.id)return;
+   latest.current=site.id;destination.current=markerPosition(site).normalize();},[site,enabled]);
+ useFrame((_,delta)=>{if(!destination.current||!enabled)return;
+   const d=camera.position.length(),target=destination.current.clone().multiplyScalar(d);
+   camera.position.lerp(target,1-Math.exp(-4.5*delta));camera.lookAt(0,0,0);controls?.update?.();
+   if(camera.position.distanceTo(target)<.012)destination.current=null;});
+ return null;
+}
+function MoonSurfacePick({onSelect}){
+ return <mesh onClick={e=>{if(e.delta>5)return;e.stopPropagation();onSelect?.(e.point.clone().normalize().multiplyScalar(1.96).toArray());}}>
+   <sphereGeometry args={[1.962,96,64]}/><meshBasicMaterial transparent opacity={0} depthWrite={false}/>
+ </mesh>;
 }
 function ZoomRig({enlarged,clockScene,viewMode}){
  const {camera}=useThree();
@@ -81,7 +98,7 @@ function ZoomRig({enlarged,clockScene,viewMode}){
  });
  return null;
 }
-export default function MoonScene({modelUrl,onModelLoaded,onModelError,sites,activeId,compareIds=[],onSelect,zoomable=true,selectedColor,onAnchor,onPositions,clockScene=false,viewMode="default"}){
+export default function MoonScene({modelUrl,onModelLoaded,onModelError,sites,activeId,compareIds=[],onSelect,onSurfaceSelect,focusOnSite=false,zoomable=true,selectedColor,onAnchor,onPositions,clockScene=false,viewMode="default"}){
  const sel=sites.find(s=>s.id===activeId)||sites[0];
  const [zoom,setZoom]=React.useState(false);
  const [failed,setFailed]=React.useState(false);
@@ -97,10 +114,12 @@ export default function MoonScene({modelUrl,onModelLoaded,onModelError,sites,act
       <ModelError key={modelKey} onError={e=>{setFailed(true);onModelError?.(e)}} fallback={<Demo/>}>
         {modelUrl&&!failed?<NASA url={modelUrl} onLoaded={onModelLoaded}/>:<Demo/>}
       </ModelError>
-      {sites.map(s=><SceneMarker key={s.id} site={s} selected={s.id===sel?.id || compareIds.includes(s.id)} color={compareIds.includes(s.id)?COLORS[compareIds.indexOf(s.id)%COLORS.length]:selectedColor} onSelect={onSelect}/>)}
+      {onSurfaceSelect&&<MoonSurfacePick onSelect={onSurfaceSelect}/>}
+      {sites.map(s=><SceneMarker key={s.id} site={s} selected={s.id===sel?.id || compareIds.includes(s.id)} color={s.isMapPick?'#ff526c':compareIds.includes(s.id)?COLORS[compareIds.indexOf(s.id)%COLORS.length]:selectedColor} onSelect={onSelect}/>)}
     </Suspense>
-    <OrbitControls enableZoom={false} enablePan={false} enableDamping dampingFactor={.075} rotateSpeed={.52} minPolarAngle={.08} maxPolarAngle={Math.PI-.08}/>
-    <ZoomRig enlarged={zoom} clockScene={clockScene} viewMode={viewMode}/>
+    <OrbitControls makeDefault enableZoom={false} enablePan={false} enableDamping dampingFactor={.075} rotateSpeed={.52} minPolarAngle={.08} maxPolarAngle={Math.PI-.08}/>
+    <CameraFocus enabled={focusOnSite} site={sel}/>
+     <ZoomRig enlarged={zoom} clockScene={clockScene} viewMode={viewMode}/>
     <MarkerTracker sites={sites} activeId={activeId} onPositions={onPositions} onAnchor={onAnchor}/>
    </Canvas>
 
