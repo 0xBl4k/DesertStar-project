@@ -1,6 +1,7 @@
 import React,{useState,useEffect,useMemo,useCallback,useRef} from 'react';
 import {Search,ArrowRight,ArrowLeft,BarChart3,Sun,Earth,CalendarDays,Clock3,Play,Pause,RotateCcw,MapPin,Plus,X,Radio,Mountain,Compass,ChevronRight,LocateFixed,Info,FileText,ShieldCheck,Menu,ExternalLink,ChevronLeft,Mouse} from 'lucide-react';
 import MoonScene from './MoonScene.jsx';
+import DateTimePicker from './DateTimePicker.jsx';
 import {SITES,COLORS,fmtAngle,changeHours} from './data.js';
 import {useScenario, useComparisons} from './useBackend.js';
 import {emptyMetric, metricAt, loadSiteCatalog} from './api.js';
@@ -59,30 +60,32 @@ function PlaceLabels({sites,positions,revealedId,onSelect}){
   const w=Math.min(width-16,Math.max(112,Math.min(220,name.length*7.7+38)));
   const h=34;
   const x=range(pt.x-w/2,8,Math.max(8,width-w-8));
-  const y=pt.y>h+22?pt.y-h-16:pt.y+19;
-  return {site,name,x,y:range(y,8,Math.max(8,height-h-8)),w,px:pt.x,py:pt.y};
+  const y=site.isMapPick?pt.y+19:(pt.y>h+22?pt.y-h-16:pt.y+19);
+  return {site,name,x,y:range(y,8,Math.max(8,height-h-8)),w:site.isMapPick?Math.min(width-16,166):w,px:pt.x,py:pt.y};
  },[revealedId,sites,positions]);
  if(!label)return null;
  return <div className="site-label-layer" aria-live="polite">
   <svg className="site-label-leaders" aria-hidden="true" width="100%" height="100%">
-   <path d={`M${label.px} ${label.py} L${label.x+label.w/2} ${label.y+17}`} stroke="#fed166"/>
+   <path d={`M${label.px} ${label.py} L${label.x+label.w/2} ${label.y+17}`} stroke={label.site.isMapPick?'#ff607a':'#fed166'}/>
   </svg>
-  <button type="button" className="map-site-label is-active" style={{left:label.x,top:label.y,width:label.w,'--tag-color':'#f8cf6a'}} onClick={()=>onSelect(label.site.id)} aria-label={`Open details for ${label.site.name}`} title="Open mission details">
-   <span className="map-tag-dot"/><span className="map-tag-text">{label.name}</span>{icon(ChevronRight,14)}
+  <button type="button" className={`map-site-label is-active ${label.site.isMapPick?'map-pick-label':''}`} style={{left:label.x,top:label.y,width:label.w,'--tag-color':label.site.isMapPick?'#ff526c':'#f8cf6a'}} onClick={()=>onSelect(label.site.id)} aria-label={`Open details for ${label.site.name}`} title="Open mission details">
+   <span className="map-tag-dot"/><span className="map-tag-text">{label.site.isMapPick?'Show More Details':label.name}</span>{icon(ChevronRight,14)}
   </button>
  </div>;
 }
-function GlobeStage({sites,activeId,compareIds=[],onSelect,modelUrl,modelStatus,onLoaded,onError,compact=false,clock=false,data,elapsed=0,date,time,moonView="default"}){
+function GlobeStage({sites,activeId,compareIds=[],onSelect,modelUrl,modelStatus,onLoaded,onError,compact=false,clock=false,data,elapsed=0,date,time,moonView="default",customPickSite=null,onSurfaceSelect,onPickedDetails,focusOnSite=false}){
  const [anchor,setAnchor]=useState(null);
  const [positions,setPositions]=useState(null);
  const [revealedId,setRevealedId]=useState(null);
+ const sceneSites=useMemo(()=>customPickSite?[...sites.filter(s=>s.id!==customPickSite.id),customPickSite]:sites,[sites,customPickSite]);
  useEffect(()=>{setAnchor(null);setRevealedId(null)},[activeId]);
+ useEffect(()=>{if(customPickSite)setRevealedId(customPickSite.id)},[customPickSite]);
  return <section className={`globe-stage ${compact?'compact':''} ${clock?'has-clock':''}`} aria-label="Interactive NASA Moon view">
   <div className="stage-upper"><span className="eyebrow">NASA / LRO · 3D MOON</span><span className="stage-gesture">{icon(Mouse,16)} <b>Drag</b> to rotate <span>·</span> <b>Double-click</b> to resize <span>·</span> Select a gold dot</span></div>
   <div className="scene-area">
     {clock && <SolarClock data={data} elapsed={elapsed} anchor={anchor} referenceTime={`${date||INITIAL_DATE}T${time||INITIAL_TIME}:00Z`}/>}
-    <MoonScene modelUrl={modelUrl} onModelLoaded={onLoaded} onModelError={onError} sites={sites} activeId={activeId} compareIds={compareIds} onSelect={setRevealedId} zoomable={true} clockScene={clock} viewMode={moonView} onAnchor={clock?setAnchor:undefined} onPositions={setPositions}/>
-    <PlaceLabels sites={sites} positions={positions} revealedId={revealedId} onSelect={onSelect}/>
+    <MoonScene modelUrl={modelUrl} onModelLoaded={onLoaded} onModelError={onError} sites={sceneSites} activeId={activeId} compareIds={compareIds} onSelect={setRevealedId} onSurfaceSelect={onSurfaceSelect} zoomable={true} clockScene={clock} viewMode={moonView} focusOnSite={focusOnSite} onAnchor={clock?setAnchor:undefined} onPositions={setPositions}/>
+    <PlaceLabels sites={sceneSites} positions={positions} revealedId={revealedId} onSelect={id=>id===customPickSite?.id?onPickedDetails?.():onSelect(id)}/>
   </div>
  </section>
 }
@@ -101,6 +104,17 @@ function Home({navigate,sites,activeId,onSelect,...globeProps}){
 }
 function SearchPage({sites,activeId,setActiveId,addCustom,navigate,addCompare,comparePickMode,cancelComparePick,...globeProps}){
  const [term,setTerm]=useState(''),[tab,setTab]=useState('missions'),[locationName,setLocationName]=useState('My landing site'),[lat,setLat]=useState('-89.70'),[lon,setLon]=useState('0.60'),[error,setError]=useState('');
+ const [pickedSite,setPickedSite]=useState(null);
+ const pickMoon=point=>{
+  // Coordinate selection uses the rendered globe's local south-pole (+Z) frame.
+  // Verify NASA GLB body-fixed orientation against your backend before scientific use.
+  const [x,y,z]=point,r=Math.hypot(...point)||1;
+  const lt=-Math.asin(Math.max(-1,Math.min(1,z/r)))*180/Math.PI;
+  const ln=Math.atan2(x,y)*180/Math.PI;
+  const id=makeId();
+  setPickedSite({id,name:'Selected Moon location',short:'Selected location',kind:'Custom coordinates',lat:lt,lon:ln,pin:[x/r,y/r],worldPoint:point,isMapPick:true,type:'Moon surface selection',summary:'Explore Sun and Earth geometry for this Moon location.',why:'Terrain-aware results depend on your backend.',resources:'User-selected location · verify 3D coordinate frame'});
+ };
+ const openPicked=()=>{if(!pickedSite)return;const {isMapPick,...site}=pickedSite;addCustom(site);setPickedSite(null);if(comparePickMode)addCompare(site.id);else navigate('details')};
  const filtered=sites.filter(s=>s.name.toLowerCase().includes(term.toLowerCase())||s.type.toLowerCase().includes(term.toLowerCase())||s.kind.toLowerCase().includes(term.toLowerCase()));
  const choose=id=>{setActiveId(id);if(comparePickMode)addCompare(id);else navigate('details')};
  const submit=e=>{e.preventDefault();const lt=Number(lat),ln=Number(lon),name=locationName.trim();if(!name){setError('Please enter a name for this location.');return;}if(!Number.isFinite(lt)||!Number.isFinite(ln)||lat.trim()===''||lon.trim()===''||lt<-90||lt>90||ln<-180||ln>180){setError('Latitude must be −90 to 90; longitude −180 to 180.');return;}
@@ -113,7 +127,7 @@ function SearchPage({sites,activeId,setActiveId,addCustom,navigate,addCompare,co
     {tab==='missions'?<div className="search-list-content"><label className="search-input">{icon(Search,17)}<input placeholder="Search a region name..." value={term} onChange={e=>setTerm(e.target.value)}/></label><div className="places-list" role="region" aria-label="Scrollable lunar landing site list" tabIndex="0">{filtered.length?filtered.map(s=><button key={s.id} className={`place-row ${activeId===s.id?'selected':''}`} onClick={()=>choose(s.id)} aria-label={`${comparePickMode?'Add to comparison':'Open details for'} ${s.name}`} title={comparePickMode?`Add ${s.name} to comparison`:`View details: ${s.name}`}><div className="place-thumbnail">{icon(Mountain,23)}</div><div className="place-text"><strong>{s.name}</strong><small>{s.kind} · {s.type}</small></div>{icon(ChevronRight,18)}</button>):<div className="empty-msg">No matching regions.</div>}</div></div>:<form className="coordinates-form" onSubmit={submit}><p>Enter a name and lunar geographic coordinates to examine a custom site.</p><label>Location name <input type="text" required maxLength={48} value={locationName} onChange={e=>setLocationName(e.target.value)} placeholder="e.g. My south-pole site"/></label><label>Latitude <span>(degrees)</span><input type="number" step="0.01" value={lat} onChange={e=>setLat(e.target.value)}/></label><label>Longitude <span>(degrees)</span><input type="number" step="0.01" value={lon} onChange={e=>setLon(e.target.value)}/></label>{error&&<div className="form-error" role="alert">{error}</div>}<button className="btn btn-blue full" type="submit">{icon(LocateFixed,17)} {comparePickMode?'Add to Comparison':'Analyze this location'} {icon(ArrowRight,17)}</button></form>}
 
   </section>
-  <div className="search-right right-column"><GlobeStage {...globeProps} sites={sites} activeId={activeId} onSelect={choose} compact/><div className="right-caption"><span className="gold-dot"/> CLICK ANY YELLOW MARKER TO SELECT A REGION <span className="caption-right">NASA GSFC / LRO</span></div></div>
+  <div className="search-right right-column"><GlobeStage {...globeProps} sites={sites} activeId={activeId} onSelect={choose} onSurfaceSelect={pickMoon} customPickSite={pickedSite} onPickedDetails={openPicked} compact/><div className="right-caption"><span className="gold-dot"/> CLICK ANY YELLOW MARKER TO SELECT A REGION <span className="caption-right">NASA GSFC / LRO</span></div></div>
  </main>
 }
 function InfoCard({Icon,label,value,subtitle}){return <div className="info-card">{icon(Icon,20)}<span><small>{label}</small><strong>{value}</strong>{subtitle&&<em>{subtitle}</em>}</span></div>}
@@ -129,7 +143,7 @@ function DetailsTabs({site,tab,setTab,m}){
 function MissionTime({date,time,setDate,setTime,elapsed,setElapsed,playing,setPlaying,speed,setSpeed,compact=false}){
  return <div className={`mission-control ${compact?'small':''}`}>
   <div className="control-heading"><span>{icon(Clock3,16)} MISSION TIME <small>UTC · {playing?'PLAYING':'PAUSED'}</small></span><span className="elapsed-pill">+{elapsed.toFixed(1)}h / 72h</span></div>
-  <div className="control-main"><label className="field-date">{icon(CalendarDays,16)}<input aria-label="Mission date UTC" type="date" min="2026-11-01" max="2027-10-29" value={date} onChange={e=>{setDate(e.target.value);setElapsed(0);setPlaying(false)}}/></label><label className="field-time">{icon(Clock3,16)}<input aria-label="Mission time UTC" type="time" value={time} onChange={e=>{setTime(e.target.value);setElapsed(0);setPlaying(false)}}/></label><button className="play-button" aria-label={playing?'Pause playback':'Play mission animation'} onClick={()=>setPlaying(!playing)}>{playing?icon(Pause,25):icon(Play,25)}</button><div className="slider-group"><input type="range" min="0" max="72" step="0.5" value={elapsed} aria-label="Mission elapsed time in hours" onChange={e=>{setElapsed(Number(e.target.value));setPlaying(false)}}/><div className="slider-labels"><span>+0h</span><span>+24h</span><span>+48h</span><span>+72h</span></div></div><select className="speed-select" value={speed} aria-label="Playback speed" onChange={e=>setSpeed(Number(e.target.value))}><option value={1}>1× speed</option><option value={2}>2× speed</option><option value={4}>4× speed</option></select><button className="reset-button" title="Reset time to start" onClick={()=>{setElapsed(0);setPlaying(false)}}>{icon(RotateCcw,17)}</button></div>
+  <div className="control-main"><label className="field-date">{icon(CalendarDays,16)}<DateTimePicker kind="date" ariaLabel="Mission date UTC" value={date} onChange={v=>{setDate(v);setElapsed(0);setPlaying(false)}}/></label><label className="field-time">{icon(Clock3,16)}<DateTimePicker kind="time" ariaLabel="Mission time UTC" value={time} onChange={v=>{setTime(v);setElapsed(0);setPlaying(false)}}/></label><button className="play-button" aria-label={playing?'Pause playback':'Play mission animation'} onClick={()=>setPlaying(!playing)}>{playing?icon(Pause,25):icon(Play,25)}</button><div className="slider-group"><input type="range" min="0" max="72" step="0.5" value={elapsed} aria-label="Mission elapsed time in hours" onChange={e=>{setElapsed(Number(e.target.value));setPlaying(false)}}/><div className="slider-labels"><span>+0h</span><span>+24h</span><span>+48h</span><span>+72h</span></div></div><select className="speed-select" value={speed} aria-label="Playback speed" onChange={e=>setSpeed(Number(e.target.value))}><option value={1}>1× speed</option><option value={2}>2× speed</option><option value={4}>4× speed</option></select><button className="reset-button" title="Reset time to start" onClick={()=>{setElapsed(0);setPlaying(false)}}>{icon(RotateCcw,17)}</button></div>
  </div>
 }
 function StatusMetrics({metric}){
@@ -180,15 +194,15 @@ function ComparePage({sites,activeId,setActiveId,compareIds,setCompareIds,compar
   <section className="comparison-panel" ref={tableRef}>
    <header className="compare-page-head"><div><span className="eyebrow">SCENARIO COMPARISON</span><h2>Compare Landing Sites</h2><p>One to four locations or dates. Compare the conditions, then explore any scenario on the NASA Moon.</p></div><div className="compare-page-actions"><button className="btn btn-blue" onClick={onAddPlace} disabled={compared.length>=4}>{icon(Plus,16)} Add Place ({compared.length}/4)</button><button className="btn btn-subtle" onClick={()=>{setCompareIds([]);setVisualId(null);setPlaying(false)}} disabled={!compared.length}>{icon(X,16)} Clear</button></div></header>
    {compared.length===0 ? <div className="compare-empty"><span>Begin by adding a landing region or your own coordinates.</span><button className="btn btn-gold" onClick={onAddPlace}>{icon(Plus,18)} Add your first place</button></div> :
-   <div className="comparison-table-scroll" role="region" aria-label="Side-by-side comparison table" tabIndex="0"><table className="comparison-table" style={{minWidth:compared.length>=4?1100:compared.length===3?870:640}}><thead><tr><th scope="col">PARAMETER</th>{compared.map((s,i)=><th scope="col" key={s.id}><div className="scenario-head"><span className="scenario-number">{String(i+1).padStart(2,'0')}</span><strong title={s.name}>{s.name}</strong><button title={`Remove ${s.name}`} aria-label={`Remove ${s.name}`} onClick={()=>remove(s.id)}>{icon(X,16)}</button></div><small>{s.backendSiteId?'Terrain-based preset':s.kind==='Custom coordinates'?'Custom location':'Artemis candidate · geometry only'}</small><div className="scenario-coords">{Math.abs(s.lat).toFixed(2)}° {s.lat<0?'S':'N'} · {Math.abs(s.lon).toFixed(2)}° {s.lon<0?'W':'E'}</div><div className="scenario-date-fields"><label>UTC date<input type="date" min="2026-11-01" max="2027-10-29" value={compareDates[s.id]||date} onChange={e=>setCompareDates(old=>({...old,[s.id]:e.target.value}))}/></label><label>Time<input type="time" value={compareTimes[s.id]||time} onChange={e=>setCompareTimes(old=>({...old,[s.id]:e.target.value}))}/></label></div></th>)}</tr></thead><tbody>{values.map(([label,extract,kind],i)=><tr key={label} className={i===3?'compare-section-break':''}><th scope="row"><span className={'metric-icon '+kind}>{kind==='sun'?icon(Sun,15):kind==='earth'?icon(Earth,15):icon(Radio,15)}</span>{label}</th>{metrics.map((m,j)=><td key={`${compared[j].id}:${label}`}>{extract(m)}</td>)}</tr>)}</tbody><tfoot><tr><th scope="row">VISUALIZATION</th>{compared.map(s=><td key={s.id}><button className="show-visual-btn" onClick={()=>showVisualization(s.id)} aria-label={`Show visualization for ${s.name}`}>{icon(ArrowRight,15)} Show Visualization</button></td>)}</tr></tfoot></table></div>}
+   <div className="comparison-table-scroll" role="region" aria-label="Side-by-side comparison table" tabIndex="0"><table className="comparison-table" style={{minWidth:compared.length>=4?1100:compared.length===3?870:640}}><thead><tr><th scope="col">PARAMETER</th>{compared.map((s,i)=><th scope="col" key={s.id}><div className="scenario-head"><span className="scenario-number">{String(i+1).padStart(2,'0')}</span><strong title={s.name}>{s.name}</strong><button title={`Remove ${s.name}`} aria-label={`Remove ${s.name}`} onClick={()=>remove(s.id)}>{icon(X,16)}</button></div><small>{s.backendSiteId?'Terrain-based preset':s.kind==='Custom coordinates'?'Custom location':'Artemis candidate · geometry only'}</small><div className="scenario-coords">{Math.abs(s.lat).toFixed(2)}° {s.lat<0?'S':'N'} · {Math.abs(s.lon).toFixed(2)}° {s.lon<0?'W':'E'}</div><div className="scenario-date-fields"><label>UTC date<DateTimePicker kind="date" ariaLabel={`UTC comparison date for ${s.name}`} value={compareDates[s.id]||date} onChange={v=>setCompareDates(old=>({...old,[s.id]:v}))}/></label><label>Time<DateTimePicker kind="time" ariaLabel={`UTC comparison time for ${s.name}`} value={compareTimes[s.id]||time} onChange={v=>setCompareTimes(old=>({...old,[s.id]:v}))}/></label></div></th>)}</tr></thead><tbody>{values.map(([label,extract,kind],i)=><tr key={label} className={i===3?'compare-section-break':''}><th scope="row"><span className={'metric-icon '+kind}>{kind==='sun'?icon(Sun,15):kind==='earth'?icon(Earth,15):icon(Radio,15)}</span>{label}</th>{metrics.map((m,j)=><td key={`${compared[j].id}:${label}`}>{extract(m)}</td>)}</tr>)}</tbody><tfoot><tr><th scope="row">VISUALIZATION</th>{compared.map(s=><td key={s.id}><button className="show-visual-btn" onClick={()=>showVisualization(s.id)} aria-label={`Show visualization for ${s.name}`}>{icon(ArrowRight,15)} Show Visualization</button></td>)}</tr></tfoot></table></div>}
    <div className="compare-table-note" role="status">{icon(Info,15)} {compareLoading?'Loading backend scenarios…':compareErrors.filter(Boolean).length?`Backend errors: ${compareErrors.filter(Boolean).join('; ')}`:'Preset results use terrain profiles. Artemis candidate and custom sites are geometry-only; their visibility metrics show N/A.'} Research preview, not flight data.</div>
   </section>
   {compared.length>0&&<section className="compare-visualization-section" ref={visualRef}>
     <div className="compare-visualization-header"><div><span className="eyebrow">SCHEMATIC VIEW · SELECTED SCENARIO</span><h2>Visualizing: {visualSite?.name}</h2><p>{visualDate} · {visualTime} UTC — choose another mission below or from its table column above.</p></div><button className="btn btn-subtle" onClick={()=>tableRef.current?.scrollIntoView({behavior:'smooth',block:'start'})}>{icon(ArrowLeft,16)} Back to Table</button></div>
     <div className="compare-visual-tabs" role="group" aria-label="Choose scenario to visualize">{compared.map(s=><button className={visualSite?.id===s.id?'active':''} key={s.id} onClick={()=>{setVisualId(s.id);setActiveId(s.id);setElapsed(0);setPlaying(false)}}>{s.name}</button>)}</div>
     <div className="compare-visual-layout">
-      <div className="compare-visual-moon"><GlobeStage {...globeProps} sites={sites} activeId={visualSite.id} onSelect={id=>{setActiveId(id);navigate('details')}} clock compact data={visualMetric} elapsed={elapsed} date={visualDate} time={visualTime}/></div>
-      <div className="compare-visual-control"><MissionTime date={visualDate} time={visualTime} setDate={v=>{setCompareDates(old=>({...old,[visualSite.id]:v}));setElapsed(0);setPlaying(false)}} setTime={v=>{setCompareTimes(old=>({...old,[visualSite.id]:v}));setElapsed(0);setPlaying(false)}} elapsed={elapsed} setElapsed={setElapsed} playing={playing} setPlaying={setPlaying} speed={globeProps.speed} setSpeed={globeProps.setSpeed}/><StatusMetrics metric={visualMetric}/><p className="compare-visual-disclaimer">Sun/Earth directions come from the FastAPI backend. The visual clock is schematic; only backend scientific presets have terrain visibility.</p></div>
+      <div className="compare-visual-moon"><GlobeStage {...globeProps} sites={sites} activeId={visualSite.id} onSelect={id=>{setActiveId(id);navigate('details')}} focusOnSite clock compact data={visualMetric} elapsed={elapsed} date={visualDate} time={visualTime}/></div>
+      <div className="compare-visual-control"><MissionTime date={visualDate} time={visualTime} setDate={v=>{setCompareDates(old=>({...old,[visualSite.id]:v}));setElapsed(0);setPlaying(false)}} setTime={v=>{setCompareTimes(old=>({...old,[visualSite.id]:v}));setElapsed(0);setPlaying(false)}} elapsed={elapsed} setElapsed={setElapsed} playing={playing} setPlaying={setPlaying} speed={globeProps.speed} setSpeed={globeProps.setSpeed}/><StatusMetrics metric={visualMetric}/></div>
     </div>
   </section>}
  </main>
@@ -216,7 +230,7 @@ export default function App(){
  return <div className="app-shell">
   <header className="site-nav"><button className="brand" onClick={()=>navigate('home')} aria-label="LUNARIS Home"><span className="crescent">◕</span><span><b>LUNARIS</b><small>LUNAR MISSION PLANNER</small></span></button>
    <nav className={menuOpen?'open':''} aria-label="Main navigation"><button className={page==='home'?'current':''} onClick={()=>navigate('home')}>Home</button><button className={['search','details'].includes(page)?'current':''} onClick={()=>navigate('search')}>Missions</button><button className={page==='compare'?'current':''} onClick={()=>navigate('compare')}>Compare</button><button className={page==='about'?'current':''} onClick={()=>navigate('about')}>About</button></nav>
-   <div className="nav-right"><span className="nav-meta"><span className="live-led"/> RESEARCH PREVIEW</span><button className="nasa-chip" type="button" title="View NASA's original Moon model publication" onClick={()=>window.open(NASA_URL,'_blank','noopener,noreferrer')}>NASA / LRO {icon(ExternalLink,13)}</button><button className="nav-menu" onClick={()=>setMenuOpen(v=>!v)} aria-label="Toggle navigation">{icon(Menu,22)}</button></div>
+   <div className="nav-right"><button className="nav-menu" onClick={()=>setMenuOpen(v=>!v)} aria-label="Toggle navigation">{icon(Menu,22)}</button></div>
   </header>
   {page==='home'&&<Home navigate={navigate} sites={sites} activeId={activeId} onSelect={setActiveId} {...shared}/>}
   {page==='search'&&<SearchPage navigate={navigate} sites={sites} activeId={activeId} setActiveId={setActiveId} addCustom={addCustom} addCompare={addCompare} comparePickMode={comparePickMode} cancelComparePick={cancelAddPlace} {...shared}/>}
@@ -224,6 +238,5 @@ export default function App(){
   {page==='details'&&<DetailPage navigate={navigate} sites={sites} activeId={activeId} setActiveId={setActiveId} addCompare={addCompare} metric={metric} {...shared}/>}
   {page==='compare'&&<ComparePage sites={sites} activeId={activeId} setActiveId={setActiveId} compareIds={compareIds} setCompareIds={setCompareIds} compareDates={compareDates} setCompareDates={setCompareDates} compareTimes={compareTimes} setCompareTimes={setCompareTimes} onAddPlace={startAddPlace} navigate={navigate} metric={metric} {...shared}/>}
   {page==='about'&&<AboutPage navigate={navigate}/>}
-  <footer className="global-footer"><span><span className="footer-status-dot"/> {modelStatus==='nasa'?'NASA 3D Moon loaded':modelStatus==='loading'?'Loading NASA Moon':'Demo Moon — NASA model needed'} <span className="footer-separator">·</span> <a href={NASA_URL} target="_blank" rel="noreferrer">NASA GSFC / LRO</a></span><span>{['details','compare'].includes(page)?'SCHEMATIC CELESTIAL CLOCK · ':''}RESEARCH PREVIEW — NOT FLIGHT DATA</span></footer>
  </div>
 }
