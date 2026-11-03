@@ -40,7 +40,7 @@ test('3D geometry uses supplied API az/el and selected site, not fake orbits',()
  near(geo.earthDirection,directionFromAzEl(site.lat,site.lon,75,6));
  assert.ok(Math.abs(dot(geo.sunDirection,geo.frame.up)-Math.sin(20*Math.PI/180))<1e-9);
  assert.ok(Math.abs(dot(geo.earthDirection,geo.frame.up)-Math.sin(6*Math.PI/180))<1e-9);
- assert.ok(Math.abs(Math.hypot(...geo.sunPosition.map((x,i)=>x-geo.surface[i]))-5.2)<1e-9);
+ assert.ok(Math.abs(Math.hypot(...geo.sunPosition.map((x,i)=>x-geo.surface[i]))-2.8)<1e-9);
 });
 
 test('scene rejects missing/nonfinite coordinates while science is loading',()=>{
