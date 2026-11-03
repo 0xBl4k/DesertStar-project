@@ -47,7 +47,7 @@ export function directionFromAzEl(latDeg, lonDeg, azDeg, elDeg) {
 
 /** 3D bodies have SCHEMATIC distances/sizes; directions come from FastAPI. */
 export function sceneGeometry(site, sky, {
-  sunDistance = 5.2, earthDistance = 4.4, radius = MOON_SCENE_RADIUS,
+  sunDistance = 2.8, earthDistance = 2.5, radius = MOON_SCENE_RADIUS,
 } = {}) {
   if (!site || !sky || ![site.lat, site.lon,
     sky.sun?.azimuth, sky.sun?.altitude,
