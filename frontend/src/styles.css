@@ -584,3 +584,33 @@
 
 /* FastAPI integration status: visible error/loading notice without altering layout. */
 .backend-notice{position:fixed;top:76px;left:50%;transform:translateX(-50%);z-index:100;max-width:min(720px,90vw);padding:10px 18px;border-radius:8px;background:#0c2442;color:#e0f3ff;border:1px solid #4481ab;font-size:12px;box-shadow:0 4px 16px #0008;pointer-events:none}
+
+
+/* Feature branch: streamline chrome without changing the scientific About content. */
+.app-shell{grid-template-rows:70px minmax(0,1fr)}
+@media(max-height:870px){.app-shell{grid-template-rows:62px minmax(0,1fr)}}
+@media(max-width:900px){.app-shell{grid-template-rows:58px minmax(0,1fr)}}
+@media(max-width:660px){.app-shell{grid-template-rows:57px minmax(0,1fr)}}
+
+/* Surface-selection label is sized like preset markers, red and below its dot. */
+.map-site-label.map-pick-label{
+  background:rgba(28,13,29,.89);border-color:#fa677d;color:#ffe6ea;
+  box-shadow:0 7px 24px #000a,0 0 0 1px #ff567c26;
+}
+.map-site-label.map-pick-label:hover,
+.map-site-label.map-pick-label:focus-visible{background:#4d1e39;border-color:#ffb1c1}
+.map-site-label.map-pick-label svg{color:#ff879c}
+
+/* In both visualizations and table columns, the unified controls remain readable. */
+.field-date,.field-time{min-width:0}
+.field-date .lunaris-picker-trigger,.field-time .lunaris-picker-trigger{height:34px;min-height:34px;padding:4px 7px;font-size:12px}
+.field-date{flex:1 1 140px}.field-time{flex:1 1 110px}
+.compare-page-v2 .scenario-date-fields .lunaris-picker-trigger{height:33px;min-height:33px;font-size:11px}
+.compare-page-v2 .scenario-date-fields label{min-width:0}
+.compare-page-v2 .scenario-date-fields .lunaris-picker{width:100%}
+.compare-page-v2 .compare-visual-control .status-metrics{flex:1 1 auto;gap:10px}
+.compare-page-v2 .compare-visual-control .status-box{flex:1;min-height:95px;display:flex;justify-content:center;flex-direction:column}
+@media(max-width:900px){
+ .field-date{flex:1 1 128px}.field-time{flex:1 1 103px}
+ .field-date .lunaris-picker-trigger,.field-time .lunaris-picker-trigger{font-size:11px;padding:4px 5px}
+}
