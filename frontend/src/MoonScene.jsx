@@ -136,7 +136,8 @@ export default function MoonScene({modelUrl,onModelLoaded,onModelError,sites,act
  // Detail views use a lunar-coordinate site marker; search/home keep their
  // existing illustrative region markers for easy selection.
  const sceneSites=useMemo(()=>clockScene&&sel&&Number.isFinite(sel.lat)&&Number.isFinite(sel.lon)
-   ? [{...sel,worldPoint:siteSurfacePosition(sel.lat,sel.lon,1.985)}] : sites,[clockScene,sel,sites]);
+   ? sites.map(s=>s.id===sel.id?{...s,worldPoint:siteSurfacePosition(s.lat,s.lon,1.985)}:s)
+   : sites,[clockScene,sel,sites]);
  const geo=useMemo(()=>sceneGeometry(sel,skyData),[sel,skyData]);
  const [zoom,setZoom]=React.useState(false);
  const [failed,setFailed]=React.useState(false);
