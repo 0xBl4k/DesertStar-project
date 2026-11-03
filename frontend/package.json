@@ -1,0 +1,28 @@
+{
+  "name": "lunaris-mission-planner",
+  "private": true,
+  "version": "2.0.0",
+  "type": "module",
+  "scripts": {
+    "predev": "node scripts/get-nasa-moon.mjs",
+    "dev": "vite --host 0.0.0.0",
+    "prebuild": "node scripts/get-nasa-moon.mjs",
+    "build": "vite build",
+    "preview": "vite preview",
+    "nasa:download": "node scripts/get-nasa-moon.mjs",
+    "test:api": "node --test tests/*.test.mjs"
+  },
+  "dependencies": {
+    "@react-three/drei": "^9.122.0",
+    "@react-three/fiber": "^8.17.10",
+    "astronomy-engine": "^2.1.19",
+    "lucide-react": "^0.468.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "three": "^0.170.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.4",
+    "vite": "^5.4.11"
+  }
+}
