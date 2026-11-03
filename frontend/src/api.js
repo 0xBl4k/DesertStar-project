@@ -106,8 +106,72 @@ function lerpAzimuth(a, b, fraction) {
   return (a + (((b - a + 540) % 360) - 180) * fraction + 360) % 360;
 }
 
-/** Adapt API fields (el/az) to the original UI fields (altitude/azimuth).
- * The timeline is interpolated visually; science windows determine visibility.
+/**
+ * Estimate when a body's CENTER is above an ideal level 0° horizon.
+ * These are derived only from DesertStar FastAPI ephemeris elevations.
+ * No terrain, crater rim, solar-disc fraction, or RF link budget is included.
+ * Crossing times are linearly interpolated between the returned hourly samples.
+ * The backend's authoritative terrain windows are NEVER replaced.
+ */
+const geometryCache = new WeakMap();
+export function geometryEstimate(result) {
+  if (!result || result.status !== 'geometry_only') return null;
+  if (result.geometry_estimate?.reference_horizon_deg === 0 &&
+      Array.isArray(result.geometry_estimate.sun_windows) &&
+      Array.isArray(result.geometry_estimate.earth_windows)) {
+    return result.geometry_estimate; // Accept an equivalent estimate from a future backend.
+  }
+  if (geometryCache.has(result)) return geometryCache.get(result);
+  const samples = result.samples;
+  const start = Date.parse(result.start_utc);
+  let estimate = null;
+  if (Number.isFinite(start) && Array.isArray(samples) && samples.length >= 2 &&
+      Number(samples[0].t) === 0 &&
+      Math.abs(Number(samples[samples.length - 1].t) - HOURS_PER_SCENARIO * 60) < 1e-6 &&
+      samples.every((s, i) => Number.isFinite(s.t) &&
+        (i === 0 || s.t > samples[i - 1].t) &&
+        Number.isFinite(s.sun?.el) && Number.isFinite(s.earth?.el))) {
+    const windowsFor = body => {
+      const out = [];
+      let opened = samples[0][body].el > 0 ? 0 : null;
+      for (let i = 1; i < samples.length; i++) {
+        const a = samples[i - 1], b = samples[i];
+        const before = a[body].el, after = b[body].el;
+        if ((before > 0) === (after > 0)) continue;
+        const fraction = Math.max(0, Math.min(1, -before / (after - before)));
+        const t = a.t + (b.t - a.t) * fraction;
+        if (after > 0) {
+          opened = t;
+        } else if (opened !== null) {
+          if (t > opened) out.push({start: new Date(start + opened * 60000).toISOString(), end: new Date(start + t * 60000).toISOString()});
+          opened = null;
+        }
+      }
+      if (opened !== null && samples[samples.length - 1].t > opened) {
+        out.push({start: new Date(start + opened * 60000).toISOString(),
+                  end: new Date(start + samples[samples.length - 1].t * 60000).toISOString()});
+      }
+      return out;
+    };
+    const sun_windows = windowsFor('sun');
+    const earth_windows = windowsFor('earth');
+    estimate = {
+      reference_horizon_deg: 0,
+      method: 'linear interpolation of backend elevation samples',
+      terrain_included: false,
+      sun_windows, earth_windows,
+      sun_hours: hoursIn(sun_windows),
+      earth_hours: hoursIn(earth_windows),
+      both_hours: overlapHours(sun_windows, earth_windows),
+    };
+  }
+  geometryCache.set(result, estimate);
+  return estimate;
+}
+
+/** Adapt API fields (el/az) to original UI fields (altitude/azimuth).
+ * Presets use backend terrain windows. Custom locations use explicitly labeled
+ * geometric estimates derived from backend elevation samples (0° horizon).
  */
 export function metricAt(result, elapsedHours = 0) {
   if (!result) return emptyMetric();
@@ -122,15 +186,24 @@ export function metricAt(result, elapsedHours = 0) {
     azimuth: lerpAzimuth(samples[i][body].az, samples[j][body].az, part),
   });
   const terrain = result.status === 'terrain_visibility';
+  const geometric = result.status === 'geometry_only' ? geometryEstimate(result) : null;
+  const sunWindows = terrain ? result.sun_windows : geometric?.sun_windows;
+  const earthWindows = terrain ? result.earth_windows : geometric?.earth_windows;
   const now = Date.parse(result.start_utc) + minute * 60000;
+  const atFinal = minute === HOURS_PER_SCENARIO * 60;
   return {
     sun: at('sun'), earth: at('earth'),
-    sunVisible: terrain ? (minute === HOURS_PER_SCENARIO * 60 ? Boolean(samples[samples.length - 1].sun.visible) : inWindows(result.sun_windows, now)) : null,
-    earthVisible: terrain ? (minute === HOURS_PER_SCENARIO * 60 ? Boolean(samples[samples.length - 1].earth.visible) : inWindows(result.earth_windows, now)) : null,
-    sunHours: terrain ? hoursIn(result.sun_windows) : null,
-    earthHours: terrain ? hoursIn(result.earth_windows) : null,
-    bothHours: terrain ? overlapHours(result.sun_windows, result.earth_windows) : null,
-    incidence: null, mode: terrain ? 'terrain' : 'geometry',
-    summary: result.summary,
+    sunVisible: !sunWindows ? null : atFinal
+      ? (terrain ? Boolean(samples[samples.length - 1].sun.visible) : samples[samples.length - 1].sun.el > 0)
+      : inWindows(sunWindows, now),
+    earthVisible: !earthWindows ? null : atFinal
+      ? (terrain ? Boolean(samples[samples.length - 1].earth.visible) : samples[samples.length - 1].earth.el > 0)
+      : inWindows(earthWindows, now),
+    sunHours: terrain ? hoursIn(sunWindows) : (geometric?.sun_hours ?? null),
+    earthHours: terrain ? hoursIn(earthWindows) : (geometric?.earth_hours ?? null),
+    bothHours: terrain ? overlapHours(sunWindows, earthWindows) : (geometric?.both_hours ?? null),
+    incidence: null, mode: terrain ? 'terrain' : geometric ? 'geometry' : 'unavailable',
+    referenceHorizonDeg: geometric ? 0 : null,
+    summary: terrain ? result.summary : null,
   };
 }
