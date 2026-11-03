@@ -1,0 +1,26 @@
+/* LUNARIS-themed, accessible UTC date/time controls. Portaled panels avoid table clipping. */
+.lunaris-picker{display:inline-flex;min-width:0;width:100%;max-width:100%}
+.lunaris-picker-trigger{width:100%;min-width:0;display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:36px;padding:6px 10px;border-radius:7px;border:1px solid #2b668f;background:#081e37;color:#eaf7ff;font-size:12px;font-weight:750;white-space:nowrap;text-align:left}
+.lunaris-picker-trigger:hover,.lunaris-picker-trigger[aria-expanded="true"]{background:#0b3050;border-color:#3bbdff}
+.lunaris-picker-chevron{color:#57c5ff;font-size:17px;line-height:1}
+.lunaris-picker-popup{position:fixed;z-index:9999;background:#06182e;border:1px solid #2d79a6;border-radius:12px;box-shadow:0 18px 56px #000c,0 0 0 1px #5bc5f51a;color:#e9f5ff;padding:14px;font-family:'Manrope',sans-serif;max-width:calc(100vw - 16px)}
+.lunaris-cal-heading{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:12px}
+.lunaris-cal-heading strong{font-size:14px}
+.lunaris-cal-heading button{width:35px;height:35px;background:#092b4c;border:1px solid #22597b;border-radius:7px;color:#8edcff;font-size:26px;line-height:1}
+.lunaris-calendar-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:3px}
+.lunaris-calendar-dayname{text-align:center;color:#92b9d6;font-size:11px;font-weight:800;padding:7px 0}
+.lunaris-calendar-grid button{border:1px solid transparent;background:#0a2139;color:#e5f0fe;border-radius:7px;min-height:34px;font-size:12px;font-weight:750}
+.lunaris-calendar-grid button:hover:not(:disabled){border-color:#4fbfff;background:#154571}
+.lunaris-calendar-grid button.selected{color:#071a30;background:#ffd15b;border-color:#ffe9a8}
+.lunaris-calendar-grid button:disabled{opacity:.22}
+.lunaris-picker-caption{font-size:10px;color:#86adcd;margin-top:12px;line-height:1.5}
+.lunaris-time-title{font-size:15px;margin:0 0 18px}.lunaris-time-title small{float:right;color:#60c9ff;font-size:11px}
+.lunaris-time-fields{display:flex;align-items:flex-end;gap:6px}
+.lunaris-time-fields label{display:flex;flex:1;flex-direction:column;gap:6px;font-size:11px;color:#9fbed8;min-width:0}
+.lunaris-time-fields select{min-height:43px;border:1px solid #33739d;border-radius:7px;background:#0a2a49;color:#eaf6ff;font-size:15px;font-weight:800;width:100%;padding:6px 4px}
+.lunaris-time-colon{font-size:24px;color:#ffcf5b;padding-bottom:7px}
+.lunaris-time-apply{width:100%;min-height:41px;margin-top:19px;background:#ffd15b;border:0;border-radius:7px;color:#061629;font-size:13px;font-weight:850}
+.lunaris-time-apply:hover{background:#ffe499}
+.field-date .lunaris-picker,.field-time .lunaris-picker{flex:1 1 auto}
+.scenario-date-fields .lunaris-picker-trigger{min-height:33px;font-size:11px;padding:5px 6px}
+@media(max-width:500px){.lunaris-picker-trigger{font-size:11px;padding:5px 6px}.lunaris-picker-popup{padding:10px}.lunaris-calendar-grid button{min-height:31px}}
