@@ -2,9 +2,9 @@ import React,{useMemo,useRef,useEffect,Suspense,Component} from 'react';
 import {Canvas,useFrame,useLoader,useThree} from '@react-three/fiber';
 import {OrbitControls,Line} from '@react-three/drei';
 import {GLTFLoader} from 'three/examples/jsm/loaders/GLTFLoader.js';
-import {TextureLoader,Box3,Vector3,MathUtils} from 'three';
+import {TextureLoader,Box3,Vector3,MathUtils,DataTexture,RGBAFormat,SRGBColorSpace,RepeatWrapping} from 'three';
 import {COLORS} from './data.js';
-import {sceneGeometry,siteSurfacePosition} from './lunarSceneMath.js';
+import {sceneGeometry,siteSurfacePosition,previewSkyAt} from './lunarSceneMath.js';
 
 class ModelError extends Component{
  constructor(p){super(p);this.state={failed:false}}
@@ -90,10 +90,31 @@ function MoonSurfacePick({onSelect}){
 
 // Sun/Earth positions are display-scaled. Their SITE-TO-BODY directions are
 // computed from FastAPI elevation/azimuth; distances are NOT physical scale.
+// Deterministic solar granulation gives the sphere visible surface detail
+// without an external texture download or pretending to be NASA solar imagery.
+function createSolarTexture(){
+ const width=256,height=128,data=new Uint8Array(width*height*4);
+ for(let y=0;y<height;y++)for(let x=0;x<width;x++){
+   const u=x/width,v=y/height,at=(y*width+x)*4;
+   const waves=Math.sin(u*48+Math.sin(v*15)*2)*.35+
+     Math.sin(v*55+u*24)*.28+Math.sin((u+v)*105)*.18;
+   const shade=Math.max(-1,Math.min(1,waves));
+   data[at]=255;data[at+1]=Math.round(180+38*shade);
+   data[at+2]=Math.round(54+31*shade);data[at+3]=255;
+ }
+ const texture=new DataTexture(data,width,height,RGBAFormat);
+ texture.needsUpdate=true;texture.colorSpace=SRGBColorSpace;
+ texture.wrapS=RepeatWrapping;
+ return texture;
+}
 function SunBody({position}){
+ const texture=useMemo(createSolarTexture,[]);
+ useEffect(()=>()=>texture.dispose(),[texture]);
  return <group position={position}>
-   <mesh><sphereGeometry args={[.36,40,24]}/><meshBasicMaterial color="#ffd063"/></mesh>
-   <mesh><sphereGeometry args={[.47,32,20]}/><meshBasicMaterial color="#ffb83a" transparent opacity={.14} depthWrite={false}/></mesh>
+   <mesh><sphereGeometry args={[.39,48,32]}/>
+     <meshBasicMaterial map={texture}/></mesh>
+   <mesh><sphereGeometry args={[.49,40,28]}/>
+     <meshBasicMaterial color="#ffac3b" transparent opacity={.13} depthWrite={false}/></mesh>
  </group>;
 }
 function EarthBody({position}){
@@ -111,7 +132,9 @@ function SceneDirections({geometry}){
    <Line points={[marker,sunPosition]} color="#ffd05a" lineWidth={2} transparent opacity={.82}/>
    <Line points={[marker,earthPosition]} color="#43bfff" lineWidth={2} transparent opacity={.82}/>
    <SunBody position={sunPosition}/>
-   <EarthBody position={earthPosition}/>
+   <Suspense fallback={<mesh position={earthPosition}><sphereGeometry args={[.33,24,16]}/><meshStandardMaterial color="#267cc6"/></mesh>}>
+     <EarthBody position={earthPosition}/>
+   </Suspense>
    {/* Local EAST (red), NORTH (cyan), UP (green) are relative to selected site. */}
    <Line points={[marker,tip(frame.east)]} color="#ff6868" lineWidth={2.5}/>
    <Line points={[marker,tip(frame.north)]} color="#5ed7ff" lineWidth={2.5}/>
@@ -131,14 +154,19 @@ function ZoomRig({enlarged,clockScene,viewMode}){
  });
  return null;
 }
-export default function MoonScene({modelUrl,onModelLoaded,onModelError,sites,activeId,compareIds=[],onSelect,onSurfaceSelect,focusOnSite=false,zoomable=true,selectedColor,onAnchor,onPositions,clockScene=false,viewMode="default",skyData=null}){
+export default function MoonScene({modelUrl,onModelLoaded,onModelError,sites,activeId,compareIds=[],onSelect,onSurfaceSelect,focusOnSite=false,zoomable=true,selectedColor,onAnchor,onPositions,clockScene=false,viewMode="default",skyData=null,previewDate="2026-11-24",previewTime="12:00",elapsedHours=0}){
  const sel=sites.find(s=>s.id===activeId)||sites[0];
  // Detail views use a lunar-coordinate site marker; search/home keep their
  // existing illustrative region markers for easy selection.
  const sceneSites=useMemo(()=>clockScene&&sel&&Number.isFinite(sel.lat)&&Number.isFinite(sel.lon)
    ? sites.map(s=>s.id===sel.id?{...s,worldPoint:siteSurfacePosition(s.lat,s.lon,1.985)}:s)
    : sites,[clockScene,sel,sites]);
- const geo=useMemo(()=>sceneGeometry(sel,skyData),[sel,skyData]);
+ // Real FastAPI directions always take precedence; a visibly labeled, optional
+ // visual preview makes the 3D canvas testable without running the backend.
+ const geo=useMemo(()=>clockScene
+   ? sceneGeometry(sel,skyData) ||
+     sceneGeometry(sel,previewSkyAt(previewDate,previewTime,elapsedHours))
+   : null,[clockScene,sel,skyData,previewDate,previewTime,elapsedHours]);
  const [zoom,setZoom]=React.useState(false);
  const [failed,setFailed]=React.useState(false);
  const modelKey=modelUrl||'demo';
@@ -157,8 +185,10 @@ export default function MoonScene({modelUrl,onModelLoaded,onModelError,sites,act
       </ModelError>
       {onSurfaceSelect&&<MoonSurfacePick onSelect={onSurfaceSelect}/>}
       {sceneSites.map(s=><SceneMarker key={s.id} site={s} selected={s.id===sel?.id || compareIds.includes(s.id)} color={s.isMapPick?'#ff526c':compareIds.includes(s.id)?COLORS[compareIds.indexOf(s.id)%COLORS.length]:selectedColor} onSelect={onSelect}/>)}
-      {clockScene&&geo&&<SceneDirections geometry={geo}/>}
+
     </Suspense>
+    {/* Render bodies independently of the GLB texture/model loading state. */}
+    {clockScene&&geo&&<SceneDirections geometry={geo}/>}
     <OrbitControls makeDefault enableZoom={false} enablePan={false} enableDamping dampingFactor={.075} rotateSpeed={.52} minPolarAngle={.08} maxPolarAngle={Math.PI-.08}/>
     <CameraFocus enabled={focusOnSite} site={sceneSites.find(s=>s.id===sel?.id)||sel}/>
      <ZoomRig enlarged={zoom} clockScene={clockScene} viewMode={viewMode}/>
