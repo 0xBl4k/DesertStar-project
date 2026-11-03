@@ -65,3 +65,21 @@ export function sceneGeometry(site, sky, {
     earthPosition: add(surface, scale(earthDirection, earthDistance)),
   };
 }
+
+
+/**
+ * Frontend-only preview when FastAPI is unavailable.
+ * These coordinates are intentionally illustrative, NOT astronomical predictions.
+ * They move with the UTC date/time and playback slider so 3D rendering can be
+ * inspected without a backend. Never use these values in scientific metrics.
+ */
+export function previewSkyAt(date = '2026-11-24', time = '12:00', elapsedHours = 0) {
+  const timestamp = Date.parse(`${date}T${time}:00Z`);
+  const hours = (Number.isFinite(timestamp) ? timestamp / 3600000 : 0) +
+    (Number.isFinite(elapsedHours) ? elapsedHours : 0);
+  const phase = ((hours % 72) + 72) % 72 * 2 * Math.PI / 72;
+  return {
+    sun: {azimuth: 95 + 15 * Math.sin(phase), altitude: 18 + 9 * Math.cos(phase)},
+    earth: {azimuth: 275 + 15 * Math.cos(phase), altitude: 10 + 4 * Math.sin(phase)},
+  };
+}
