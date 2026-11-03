@@ -1,9 +1,10 @@
 import React,{useMemo,useRef,useEffect,Suspense,Component} from 'react';
 import {Canvas,useFrame,useLoader,useThree} from '@react-three/fiber';
-import {OrbitControls} from '@react-three/drei';
+import {OrbitControls,Line} from '@react-three/drei';
 import {GLTFLoader} from 'three/examples/jsm/loaders/GLTFLoader.js';
 import {TextureLoader,Box3,Vector3,MathUtils} from 'three';
 import {COLORS} from './data.js';
+import {sceneGeometry,siteSurfacePosition} from './lunarSceneMath.js';
 
 class ModelError extends Component{
  constructor(p){super(p);this.state={failed:false}}
@@ -86,6 +87,38 @@ function MoonSurfacePick({onSelect}){
    <sphereGeometry args={[1.962,96,64]}/><meshBasicMaterial transparent opacity={0} depthWrite={false}/>
  </mesh>;
 }
+
+// Sun/Earth positions are display-scaled. Their SITE-TO-BODY directions are
+// computed from FastAPI elevation/azimuth; distances are NOT physical scale.
+function SunBody({position}){
+ return <group position={position}>
+   <mesh><sphereGeometry args={[.36,40,24]}/><meshBasicMaterial color="#ffd063"/></mesh>
+   <mesh><sphereGeometry args={[.47,32,20]}/><meshBasicMaterial color="#ffb83a" transparent opacity={.14} depthWrite={false}/></mesh>
+ </group>;
+}
+function EarthBody({position}){
+ const texture=useLoader(TextureLoader,'/assets/earth.png');
+ return <mesh position={position}>
+   <sphereGeometry args={[.31,40,28]}/>
+   <meshStandardMaterial map={texture} roughness={.9} metalness={0}
+      emissive="#122943" emissiveIntensity={.28}/>
+ </mesh>;
+}
+function SceneDirections({geometry}){
+ const {marker,frame,sunPosition,earthPosition}=geometry;
+ const tip=(axis)=>marker.map((v,i)=>v+axis[i]*.56);
+ return <>
+   <Line points={[marker,sunPosition]} color="#ffd05a" lineWidth={2} transparent opacity={.82}/>
+   <Line points={[marker,earthPosition]} color="#43bfff" lineWidth={2} transparent opacity={.82}/>
+   <SunBody position={sunPosition}/>
+   <EarthBody position={earthPosition}/>
+   {/* Local EAST (red), NORTH (cyan), UP (green) are relative to selected site. */}
+   <Line points={[marker,tip(frame.east)]} color="#ff6868" lineWidth={2.5}/>
+   <Line points={[marker,tip(frame.north)]} color="#5ed7ff" lineWidth={2.5}/>
+   <Line points={[marker,tip(frame.up)]} color="#76ee9a" lineWidth={2.5}/>
+ </>;
+}
+
 function ZoomRig({enlarged,clockScene,viewMode}){
  const {camera}=useThree();
  useFrame((_,delta)=>{
@@ -98,8 +131,13 @@ function ZoomRig({enlarged,clockScene,viewMode}){
  });
  return null;
 }
-export default function MoonScene({modelUrl,onModelLoaded,onModelError,sites,activeId,compareIds=[],onSelect,onSurfaceSelect,focusOnSite=false,zoomable=true,selectedColor,onAnchor,onPositions,clockScene=false,viewMode="default"}){
+export default function MoonScene({modelUrl,onModelLoaded,onModelError,sites,activeId,compareIds=[],onSelect,onSurfaceSelect,focusOnSite=false,zoomable=true,selectedColor,onAnchor,onPositions,clockScene=false,viewMode="default",skyData=null}){
  const sel=sites.find(s=>s.id===activeId)||sites[0];
+ // Detail views use a lunar-coordinate site marker; search/home keep their
+ // existing illustrative region markers for easy selection.
+ const sceneSites=useMemo(()=>clockScene&&sel&&Number.isFinite(sel.lat)&&Number.isFinite(sel.lon)
+   ? [{...sel,worldPoint:siteSurfacePosition(sel.lat,sel.lon,1.985)}] : sites,[clockScene,sel,sites]);
+ const geo=useMemo(()=>sceneGeometry(sel,skyData),[sel,skyData]);
  const [zoom,setZoom]=React.useState(false);
  const [failed,setFailed]=React.useState(false);
  const modelKey=modelUrl||'demo';
@@ -107,20 +145,23 @@ export default function MoonScene({modelUrl,onModelLoaded,onModelError,sites,act
  useEffect(()=>()=>{document.body.style.cursor='auto'},[]);
  return <div className="moon-3d-wrap" onDoubleClick={()=>zoomable&&setZoom(v=>!v)} title={zoomable?'Drag to rotate · Double-click to change size':'Drag to rotate'}>
    <Canvas camera={{position:[0,0,7.3],fov:39,near:.1,far:60}} dpr={[1,1.8]} gl={{alpha:true,antialias:true,powerPreference:'high-performance'}}>
-    <ambientLight intensity={.55}/><hemisphereLight intensity={.21} color={'#c7ddff'} groundColor={'#182c4a'}/>
-    <directionalLight intensity={2.3} color={'#ffe9c6'} position={[-3.5,2.5,5.5]}/>
-    <directionalLight intensity={.28} color={'#3484d3'} position={[5,-2,-3]}/>
+    <ambientLight intensity={geo?.sunDirection?.length ? .10 : .55}/>
+    <hemisphereLight intensity={geo?.sunDirection?.length ? .045 : .21} color={'#c7ddff'} groundColor={'#182c4a'}/>
+    {geo
+      ? <directionalLight intensity={2.7} color="#fff0cd" position={geo.sunDirection.map(v=>v*28)}/>
+      : <><directionalLight intensity={2.3} color="#ffe9c6" position={[-3.5,2.5,5.5]}/><directionalLight intensity={.28} color="#3484d3" position={[5,-2,-3]}/></>}
     <Suspense fallback={<mesh><sphereGeometry args={[1.96,32,20]}/><meshStandardMaterial color="#2f3848" roughness={1}/></mesh>}>
       <ModelError key={modelKey} onError={e=>{setFailed(true);onModelError?.(e)}} fallback={<Demo/>}>
         {modelUrl&&!failed?<NASA url={modelUrl} onLoaded={onModelLoaded}/>:<Demo/>}
       </ModelError>
       {onSurfaceSelect&&<MoonSurfacePick onSelect={onSurfaceSelect}/>}
-      {sites.map(s=><SceneMarker key={s.id} site={s} selected={s.id===sel?.id || compareIds.includes(s.id)} color={s.isMapPick?'#ff526c':compareIds.includes(s.id)?COLORS[compareIds.indexOf(s.id)%COLORS.length]:selectedColor} onSelect={onSelect}/>)}
+      {sceneSites.map(s=><SceneMarker key={s.id} site={s} selected={s.id===sel?.id || compareIds.includes(s.id)} color={s.isMapPick?'#ff526c':compareIds.includes(s.id)?COLORS[compareIds.indexOf(s.id)%COLORS.length]:selectedColor} onSelect={onSelect}/>)}
+      {clockScene&&geo&&<SceneDirections geometry={geo}/>}
     </Suspense>
     <OrbitControls makeDefault enableZoom={false} enablePan={false} enableDamping dampingFactor={.075} rotateSpeed={.52} minPolarAngle={.08} maxPolarAngle={Math.PI-.08}/>
-    <CameraFocus enabled={focusOnSite} site={sel}/>
+    <CameraFocus enabled={focusOnSite} site={sceneSites.find(s=>s.id===sel?.id)||sel}/>
      <ZoomRig enlarged={zoom} clockScene={clockScene} viewMode={viewMode}/>
-    <MarkerTracker sites={sites} activeId={activeId} onPositions={onPositions} onAnchor={onAnchor}/>
+    <MarkerTracker sites={sceneSites} activeId={activeId} onPositions={onPositions} onAnchor={onAnchor}/>
    </Canvas>
 
   </div>;
