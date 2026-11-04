@@ -634,3 +634,15 @@
 .sky3d-legend .legend-sun{background:#ffd05a}
 .sky3d-legend .legend-earth{background:#43bfff}
 @media(max-width:660px){.sky3d-legend{top:4px;right:4px;padding:6px 8px;font-size:9px;max-width:53%}.sky3d-legend small{font-size:8px}}
+
+/* Phase 1: these labels track actual 3D objects, with lunar occlusion. */
+.moon-3d-wrap{overflow:hidden}
+.scene-unavailable{height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:24px;color:#c8deef;text-align:center}
+.scene-unavailable strong{font-size:17px;color:#f1f7ff}.scene-unavailable p{max-width:340px;font-size:12px;line-height:1.6}
+.scene-body-label,.scene-axis-label{pointer-events:none;user-select:none;white-space:nowrap;font-family:'Manrope',sans-serif;font-weight:800;text-shadow:0 1px 4px #000}
+.scene-body-label{font-size:10px;letter-spacing:.12em;padding:3px 6px;border-radius:5px;background:#031020bf;border:1px solid #63768b80}
+.sun-label{color:#ffdb7c;border-color:#a4803b}.earth-label{color:#93d9ff;border-color:#3b718e}
+.scene-axis-label{font-size:9px;background:#021021c4;padding:2px 4px;border-radius:3px}
+.sky3d-legend{top:auto;right:10px;bottom:10px;max-width:min(260px,52%);gap:4px;padding:8px 10px}
+.sky3d-legend time{color:#d7e8f8;font-size:10px;font-variant-numeric:tabular-nums}
+@media(max-width:660px){.sky3d-legend{top:auto;right:4px;bottom:4px;padding:6px 7px;max-width:60%}.scene-body-label{font-size:9px}.scene-axis-label{font-size:8px}}

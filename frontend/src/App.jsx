@@ -5,6 +5,8 @@ import DateTimePicker from './DateTimePicker.jsx';
 import {SITES,COLORS,fmtAngle,changeHours} from './data.js';
 import {useScenario, useComparisons} from './useBackend.js';
 import {emptyMetric, metricAt, loadSiteCatalog} from './api.js';
+import {surfaceCoordinates} from './lunarSceneMath.js';
+import {resolveLunarScene} from './lunarEphemeris.js';
 
 const NASA_URL='https://svs.gsfc.nasa.gov/14959/';
 const NASA_ASSET='https://svs.gsfc.nasa.gov/vis/a010000/a014900/a014959/moon_small.glb';
@@ -49,13 +51,16 @@ function GlobeStage({sites,activeId,compareIds=[],onSelect,modelUrl,modelStatus,
  const [positions,setPositions]=useState(null);
  const [revealedId,setRevealedId]=useState(null);
  const sceneSites=useMemo(()=>customPickSite?[...sites.filter(s=>s.id!==customPickSite.id),customPickSite]:sites,[sites,customPickSite]);
+ const sceneSite=sceneSites.find(s=>s.id===activeId)||sceneSites[0];
+ const scene=useMemo(()=>clock?resolveLunarScene(sceneSite,data,date,time,elapsed):null,[clock,sceneSite,data,date,time,elapsed]);
+ const moment=clock&&date&&time?changeHours(date,time,elapsed):null;
  useEffect(()=>{setRevealedId(null)},[activeId]);
  useEffect(()=>{if(customPickSite)setRevealedId(customPickSite.id)},[customPickSite]);
  return <section className={`globe-stage ${compact?'compact':''} ${clock?'has-clock':''}`} aria-label="Interactive NASA Moon view">
-  <div className="stage-upper"><span className="eyebrow">NASA / LRO · 3D MOON</span><span className="stage-gesture">{icon(Mouse,16)} <b>Drag</b> to rotate <span>·</span> <b>Double-click</b> to resize <span>·</span> Select a gold dot</span></div>
+  <div className="stage-upper"><span className="eyebrow">NASA / LRO · 3D MOON</span><span className="stage-gesture">{icon(Mouse,16)} <b>Drag</b> to rotate <span>·</span> <b>Double-click</b> to fit <span>·</span> Select a gold dot</span></div>
   <div className="scene-area">
-    {clock&&<div className="sky3d-legend" aria-label="Three-dimensional celestial direction guide"><b>{Number.isFinite(data?.sun?.altitude)&&Number.isFinite(data?.sun?.azimuth)&&Number.isFinite(data?.earth?.altitude)&&Number.isFinite(data?.earth?.azimuth)?"3D SUN / EARTH · BACKEND":"3D PREVIEW · NOT SCIENTIFIC"}</b><span><i className="legend-sun"/> Sun direction <i className="legend-earth"/> Earth direction</span><small>Local axes: E red · N cyan · Up green</small><small>Display sizes/distances not to scale</small>{(!Number.isFinite(data?.sun?.altitude)||!Number.isFinite(data?.earth?.altitude))&&<small>Illustrative movement until FastAPI data loads</small>}</div>}
-    <MoonScene modelUrl={modelUrl} onModelLoaded={onLoaded} onModelError={onError} sites={sceneSites} activeId={activeId} compareIds={compareIds} onSelect={setRevealedId} onSurfaceSelect={onSurfaceSelect} zoomable={true} clockScene={clock} skyData={data} previewDate={date} previewTime={time} elapsedHours={elapsed} viewMode={moonView} focusOnSite={focusOnSite} onPositions={setPositions}/>
+    {clock&&<div className="sky3d-legend" aria-label="Three-dimensional celestial direction guide"><b>{scene?.source==='backend'?'3D SUN / EARTH · API':scene?.source==='ephemeris'?'3D SUN / EARTH · LOCAL DATA':'3D DATA UNAVAILABLE'}</b>{moment&&<time dateTime={`${moment.date}T${moment.time}:00Z`}>{moment.date} · {moment.time} UTC</time>}{scene?.geometry?<><span><i className="legend-sun"/> Sun {fmtAngle(scene.sky.sun.altitude)} · az {asFixed(scene.sky.sun.azimuth)}°</span><span><i className="legend-earth"/> Earth {fmtAngle(scene.sky.earth.altitude)} · az {asFixed(scene.sky.earth.azimuth)}°</span><small>Local axes: X/East · Y/North · Z/Up</small><small>Sizes and distances are schematic</small></>:<small>Choose a time within Nov 2026 – Oct 2027</small>}</div>}
+    <MoonScene modelUrl={modelUrl} onModelLoaded={onLoaded} onModelError={onError} sites={sceneSites} activeId={activeId} compareIds={compareIds} onSelect={setRevealedId} onSurfaceSelect={onSurfaceSelect} zoomable={true} clockScene={clock} geometry={scene?.geometry} viewMode={moonView} focusOnSite={focusOnSite} onPositions={setPositions}/>
     <PlaceLabels sites={sceneSites} positions={positions} revealedId={revealedId} onSelect={id=>id===customPickSite?.id?onPickedDetails?.():onSelect(id)}/>
   </div>
  </section>
@@ -77,11 +82,10 @@ function SearchPage({sites,activeId,setActiveId,addCustom,navigate,addCompare,co
  const [term,setTerm]=useState(''),[tab,setTab]=useState('missions'),[locationName,setLocationName]=useState('My landing site'),[lat,setLat]=useState('-89.70'),[lon,setLon]=useState('0.60'),[error,setError]=useState('');
  const [pickedSite,setPickedSite]=useState(null);
  const pickMoon=point=>{
-  // Coordinate selection uses the rendered globe's local south-pole (+Z) frame.
-  // Verify NASA GLB body-fixed orientation against your backend before scientific use.
-  const [x,y,z]=point,r=Math.hypot(...point)||1;
-  const lt=-Math.asin(Math.max(-1,Math.min(1,z/r)))*180/Math.PI;
-  const ln=Math.atan2(x,y)*180/Math.PI;
+  const coordinates=surfaceCoordinates(point);
+  if(!coordinates)return;
+  const {lat:lt,lon:ln}=coordinates;
+  const [x,y]=point,r=Math.hypot(...point);
   const id=makeId();
   setPickedSite({id,name:'Selected Moon location',short:'Selected location',kind:'Custom coordinates',lat:lt,lon:ln,pin:[x/r,y/r],worldPoint:point,isMapPick:true,type:'Moon surface selection',summary:'Explore Sun and Earth geometry for this Moon location.',why:'Terrain-aware results depend on your backend.',resources:'User-selected location · verify 3D coordinate frame'});
  };
@@ -197,7 +201,9 @@ export default function App(){
  const startAddPlace=()=>{if(compareIds.length>=4)return;setComparePickMode(true);navigate('search')};
  const cancelAddPlace=()=>{setComparePickMode(false);navigate('compare')};
  const addCustom=s=>{setSites(prev=>[...prev,s]);setActiveId(s.id)};
- const shared={modelUrl,modelStatus,data:metric,onLoaded:()=>setModelStatus('nasa'),onError:e=>{setModelStatus('demo');setModelMsg(String(e?.message||e))},date,time,setDate,setTime,elapsed,setElapsed,playing,setPlaying,speed,setSpeed};
+ const onModelLoaded=useCallback(()=>setModelStatus('nasa'),[]);
+ const onModelError=useCallback(e=>{setModelStatus('demo');setModelMsg(String(e?.message||e))},[]);
+ const shared={modelUrl,modelStatus,data:metric,onLoaded:onModelLoaded,onError:onModelError,date,time,setDate,setTime,elapsed,setElapsed,playing,setPlaying,speed,setSpeed};
  return <div className="app-shell">
   <header className="site-nav"><button className="brand" onClick={()=>navigate('home')} aria-label="LUNARIS Home"><span className="crescent">◕</span><span><b>LUNARIS</b><small>LUNAR MISSION PLANNER</small></span></button>
    <nav className={menuOpen?'open':''} aria-label="Main navigation"><button className={page==='home'?'current':''} onClick={()=>navigate('home')}>Home</button><button className={['search','details'].includes(page)?'current':''} onClick={()=>navigate('search')}>Missions</button><button className={page==='compare'?'current':''} onClick={()=>navigate('compare')}>Compare</button><button className={page==='about'?'current':''} onClick={()=>navigate('about')}>About</button></nav>
