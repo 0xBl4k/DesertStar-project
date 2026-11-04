@@ -106,11 +106,27 @@ export function sceneGeometry(site, sky, {
 }
 
 /** Balance the complete scene in its canvas rather than leave the bodies offscreen. */
-export function sceneCenter(geometry) {
+export function visibleSceneSpheres(geometry, settings = {}) {
+  if (!geometry) return [];
+  const bodies = [{center: [0, 0, 0], radius: geometry.radius + .014}];
+  if (settings.show3DObjects !== false) {
+    bodies.push({center: geometry.sunPosition, radius: SUN_RADIUS * (settings.showSunGlow ? 1.45 : 1)});
+    bodies.push({center: geometry.earthPosition, radius: EARTH_RADIUS * (settings.showEarthGlow ? 1.16 : 1)});
+  } else if (settings.showDirectionLines !== false) {
+    bodies.push({center: geometry.sunPosition, radius: .02}, {center: geometry.earthPosition, radius: .02});
+  }
+  if (settings.showSiteMarker !== false) bodies.push({center: geometry.marker, radius: .09});
+  if (settings.showAxes !== false) {
+    bodies.push(...Object.values(geometry.frame).map(axis => ({center: add(geometry.marker, scale(axis, .86)), radius: .12})));
+  }
+  return bodies;
+}
+
+export function sceneCenter(geometry, settings = {}) {
   if (!geometry) return [0, 0, 0];
   const min = [-geometry.radius, -geometry.radius, -geometry.radius];
   const max = [geometry.radius, geometry.radius, geometry.radius];
-  for (const [point, radius] of [[geometry.sunPosition, SUN_RADIUS], [geometry.earthPosition, EARTH_RADIUS]]) {
+  for (const {center: point, radius} of visibleSceneSpheres(geometry, settings)) {
     for (let i = 0; i < 3; i++) {
       min[i] = Math.min(min[i], point[i] - radius);
       max[i] = Math.max(max[i], point[i] + radius);
@@ -120,20 +136,13 @@ export function sceneCenter(geometry) {
 }
 
 /** Fit every body at the current orbit angle, including narrow/mobile canvases. */
-export function sceneCameraDistance(geometry, viewDirection, aspect, fov = 39, margin = 1.16, target = sceneCenter(geometry)) {
+export function sceneCameraDistance(geometry, viewDirection, aspect, fov = 39, margin = 1.16, target = sceneCenter(geometry), settings = {}) {
   const view = finiteVector(viewDirection) && normalized(viewDirection);
   if (!geometry || !view || !(aspect > 0) || !(fov > 0 && fov < 180)) return null;
   const horizontal = normalized(cross(Math.hypot(view[0], view[2]) < 1e-9 ? [0, 0, 1] : [0, 1, 0], view));
   const vertical = normalized(cross(view, horizontal));
   const tanY = Math.tan(radians(fov / 2)), tanX = tanY * aspect;
-  const bodies = [
-    {center: [0, 0, 0], radius: geometry.radius},
-    {center: geometry.sunPosition, radius: SUN_RADIUS},
-    {center: geometry.earthPosition, radius: EARTH_RADIUS},
-    ...Object.values(geometry.frame).map(axis => ({
-      center: add(geometry.marker, scale(axis, 0.86)), radius: 0.12,
-    })),
-  ];
+  const bodies = visibleSceneSpheres(geometry, settings);
   return Math.max(...bodies.map(({center, radius}) => {
     const relative = center.map((value, i) => value - target[i]);
     return dot(relative, view) + radius + margin *

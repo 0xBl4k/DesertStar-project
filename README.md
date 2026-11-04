@@ -97,6 +97,19 @@ Open:
 
 > The API expects `data/ephemeris.json`, the required `data/horizons/*.json`, and `frontend/data/sites.json` at the paths shown above. Launch Uvicorn from the repository root so imports and relative paths resolve correctly.
 
+## 3D frontend
+
+From `frontend/`, run `npm ci` followed by `npm run dev`. Mission Details and
+Compare include 3D Sun/Earth bodies, site-relative axes and sunlight, a clear
+day/night boundary, optional night highlighting/hatching, and saved scientific
+or cinematic view preferences. **Visual options** opens the controls beneath
+the mission-time panel.
+
+The 3D view can use the included ephemeris when FastAPI is unavailable;
+visibility analysis and summary metrics still use the API. Night highlighting
+represents global day/night separation. See [3D visualization](docs/3d-visualization.md)
+for controls, scope and validation.
+
 ## API reference
 
 ### `GET /api/sites`

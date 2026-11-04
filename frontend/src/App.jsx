@@ -2,11 +2,13 @@ import React,{useState,useEffect,useMemo,useCallback,useRef} from 'react';
 import {Search,ArrowRight,ArrowLeft,BarChart3,Sun,Earth,CalendarDays,Clock3,Play,Pause,RotateCcw,MapPin,Plus,X,Radio,Mountain,Compass,ChevronRight,LocateFixed,Info,FileText,ShieldCheck,Menu,ExternalLink,ChevronLeft,Mouse} from 'lucide-react';
 import MoonScene from './MoonScene.jsx';
 import DateTimePicker from './DateTimePicker.jsx';
+import SceneControls from './SceneControls.jsx';
 import {SITES,COLORS,fmtAngle,changeHours} from './data.js';
 import {useScenario, useComparisons} from './useBackend.js';
 import {emptyMetric, metricAt, loadSiteCatalog} from './api.js';
 import {surfaceCoordinates} from './lunarSceneMath.js';
 import {resolveLunarScene} from './lunarEphemeris.js';
+import {SCIENTIFIC_VIEW,loadScenePreferences,saveScenePreferences} from './scenePreferences.js';
 
 const NASA_URL='https://svs.gsfc.nasa.gov/14959/';
 const NASA_ASSET='https://svs.gsfc.nasa.gov/vis/a010000/a014900/a014959/moon_small.glb';
@@ -47,7 +49,7 @@ function PlaceLabels({sites,positions,revealedId,onSelect}){
   </button>
  </div>;
 }
-function GlobeStage({sites,activeId,compareIds=[],onSelect,modelUrl,modelStatus,onLoaded,onError,compact=false,clock=false,data,elapsed=0,date,time,moonView="default",customPickSite=null,onSurfaceSelect,onPickedDetails,focusOnSite=false}){
+function GlobeStage({sites,activeId,compareIds=[],onSelect,modelUrl,modelStatus,onLoaded,onError,compact=false,clock=false,data,elapsed=0,date,time,moonView="default",customPickSite=null,onSurfaceSelect,onPickedDetails,focusOnSite=false,visualSettings=SCIENTIFIC_VIEW}){
  const [positions,setPositions]=useState(null);
  const [revealedId,setRevealedId]=useState(null);
  const sceneSites=useMemo(()=>customPickSite?[...sites.filter(s=>s.id!==customPickSite.id),customPickSite]:sites,[sites,customPickSite]);
@@ -59,9 +61,20 @@ function GlobeStage({sites,activeId,compareIds=[],onSelect,modelUrl,modelStatus,
  return <section className={`globe-stage ${compact?'compact':''} ${clock?'has-clock':''}`} aria-label="Interactive NASA Moon view">
   <div className="stage-upper"><span className="eyebrow">NASA / LRO · 3D MOON</span><span className="stage-gesture">{icon(Mouse,16)} <b>Drag</b> to rotate <span>·</span> <b>Double-click</b> to fit <span>·</span> Select a gold dot</span></div>
   <div className="scene-area">
-    {clock&&<div className="sky3d-legend" aria-label="Three-dimensional celestial direction guide"><b>{scene?.source==='backend'?'3D SUN / EARTH · API':scene?.source==='ephemeris'?'3D SUN / EARTH · LOCAL DATA':'3D DATA UNAVAILABLE'}</b>{moment&&<time dateTime={`${moment.date}T${moment.time}:00Z`}>{moment.date} · {moment.time} UTC</time>}{scene?.geometry?<><span><i className="legend-sun"/> Sun {fmtAngle(scene.sky.sun.altitude)} · az {asFixed(scene.sky.sun.azimuth)}°</span><span><i className="legend-earth"/> Earth {fmtAngle(scene.sky.earth.altitude)} · az {asFixed(scene.sky.earth.azimuth)}°</span><small>Local axes: X/East · Y/North · Z/Up</small><small>Sizes and distances are schematic</small></>:<small>Choose a time within Nov 2026 – Oct 2027</small>}</div>}
-    <MoonScene modelUrl={modelUrl} onModelLoaded={onLoaded} onModelError={onError} sites={sceneSites} activeId={activeId} compareIds={compareIds} onSelect={setRevealedId} onSurfaceSelect={onSurfaceSelect} zoomable={true} clockScene={clock} geometry={scene?.geometry} viewMode={moonView} focusOnSite={focusOnSite} onPositions={setPositions}/>
-    <PlaceLabels sites={sceneSites} positions={positions} revealedId={revealedId} onSelect={id=>id===customPickSite?.id?onPickedDetails?.():onSelect(id)}/>
+    {clock&&<div className="sky3d-legend" aria-label="Three-dimensional celestial direction guide">
+     <b>{scene?.source==='backend'?'3D SUN / EARTH · API':scene?.source==='ephemeris'?'3D SUN / EARTH · LOCAL DATA':'3D DATA UNAVAILABLE'}</b>
+     {moment&&<time dateTime={`${moment.date}T${moment.time}:00Z`}>{moment.date} · {moment.time} UTC</time>}
+     {scene?.geometry?<>
+      <span><i className="legend-sun"/> Sun {fmtAngle(scene.sky.sun.altitude)} · az {asFixed(scene.sky.sun.azimuth)}°</span>
+      <span><i className="legend-earth"/> Earth {fmtAngle(scene.sky.earth.altitude)} · az {asFixed(scene.sky.earth.azimuth)}°</span>
+      {visualSettings.showTerminator&&<span><i className="legend-boundary"/> Day/night boundary</span>}
+      {visualSettings.showDarkOverlay&&<span><i className="legend-night"/> Night area {visualSettings.showHatching?'· hatched':''}</span>}
+      {visualSettings.showAxes&&<small>Local axes: X/East · Y/North · Z/Up</small>}
+      <small>Global lighting · sizes/distances schematic</small>
+     </>:<small>Choose a time within Nov 2026 – Oct 2027</small>}
+    </div>}
+    <MoonScene modelUrl={modelUrl} onModelLoaded={onLoaded} onModelError={onError} sites={sceneSites} activeId={activeId} compareIds={compareIds} onSelect={setRevealedId} onSurfaceSelect={onSurfaceSelect} zoomable={true} clockScene={clock} geometry={scene?.geometry} viewMode={moonView} focusOnSite={focusOnSite} visualSettings={visualSettings} onPositions={setPositions}/>
+    {(!clock||visualSettings.showSiteMarker)&&<PlaceLabels sites={sceneSites} positions={positions} revealedId={revealedId} onSelect={id=>id===customPickSite?.id?onPickedDetails?.():onSelect(id)}/>}
   </div>
  </section>
 }
@@ -139,7 +152,7 @@ function DetailPage({sites,activeId,setActiveId,addCompare,navigate,metric,elaps
      <DetailsTabs site={site} tab={tab} setTab={setTab} m={rightMetric}/>
      <button className="btn btn-gold compare-cta" onClick={()=>addCompare(site.id)}>{icon(BarChart3,19)} Add to Compare {icon(ArrowRight,19)}</button>
    </section>
-   <div className="detail-right right-column"><GlobeStage {...rightProps} sites={sites} activeId={activeId} onSelect={setActiveId} moonView="details" compact clock data={rightMetric} elapsed={elapsed}/><div className="right-tools"><MissionTime {...rightProps} elapsed={elapsed}/><StatusMetrics metric={rightMetric}/></div></div>
+   <div className="detail-right right-column"><GlobeStage {...rightProps} sites={sites} activeId={activeId} onSelect={setActiveId} moonView="details" compact clock data={rightMetric} elapsed={elapsed}/><div className="right-tools"><MissionTime {...rightProps} elapsed={elapsed}/><SceneControls settings={rightProps.visualSettings} onChange={rightProps.setVisualSettings}/><StatusMetrics metric={rightMetric}/></div></div>
  </main>
 }
 function ComparePage({sites,activeId,setActiveId,compareIds,setCompareIds,compareDates,setCompareDates,compareTimes,setCompareTimes,date,time,setDate,setTime,setElapsed,setPlaying,navigate,onAddPlace,elapsed,playing,...globeProps}){
@@ -177,7 +190,7 @@ function ComparePage({sites,activeId,setActiveId,compareIds,setCompareIds,compar
     <div className="compare-visual-tabs" role="group" aria-label="Choose scenario to visualize">{compared.map(s=><button className={visualSite?.id===s.id?'active':''} key={s.id} onClick={()=>{setVisualId(s.id);setActiveId(s.id);setElapsed(0);setPlaying(false)}}>{s.name}</button>)}</div>
     <div className="compare-visual-layout">
       <div className="compare-visual-moon"><GlobeStage {...globeProps} sites={sites} activeId={visualSite.id} onSelect={id=>{setActiveId(id);navigate('details')}} focusOnSite clock compact data={visualMetric} elapsed={elapsed} date={visualDate} time={visualTime}/></div>
-      <div className="compare-visual-control"><MissionTime date={visualDate} time={visualTime} setDate={v=>{setCompareDates(old=>({...old,[visualSite.id]:v}));setElapsed(0);setPlaying(false)}} setTime={v=>{setCompareTimes(old=>({...old,[visualSite.id]:v}));setElapsed(0);setPlaying(false)}} elapsed={elapsed} setElapsed={setElapsed} playing={playing} setPlaying={setPlaying} speed={globeProps.speed} setSpeed={globeProps.setSpeed}/><StatusMetrics metric={visualMetric}/></div>
+      <div className="compare-visual-control"><MissionTime date={visualDate} time={visualTime} setDate={v=>{setCompareDates(old=>({...old,[visualSite.id]:v}));setElapsed(0);setPlaying(false)}} setTime={v=>{setCompareTimes(old=>({...old,[visualSite.id]:v}));setElapsed(0);setPlaying(false)}} elapsed={elapsed} setElapsed={setElapsed} playing={playing} setPlaying={setPlaying} speed={globeProps.speed} setSpeed={globeProps.setSpeed}/><SceneControls settings={globeProps.visualSettings} onChange={globeProps.setVisualSettings}/><StatusMetrics metric={visualMetric}/></div>
     </div>
   </section>}
  </main>
@@ -189,6 +202,8 @@ export default function App(){
  const [date,setDate]=useState(INITIAL_DATE),[time,setTime]=useState(INITIAL_TIME),[elapsed,setElapsed]=useState(0),[playing,setPlaying]=useState(false),[speed,setSpeed]=useState(1);
  const [modelUrl,setModelUrl]=useState(null),[modelStatus,setModelStatus]=useState('loading'),[modelMsg,setModelMsg]=useState('');
  const [menuOpen,setMenuOpen]=useState(false);
+ const [visualSettings,setVisualSettings]=useState(loadScenePreferences);
+ useEffect(()=>{saveScenePreferences(visualSettings)},[visualSettings]);
  const activeSite=sites.find(s=>s.id===activeId)||sites[0];
  const now=useMemo(()=>changeHours(date,time,elapsed),[date,time,elapsed]);
  const {metric,loading:backendLoading,error:backendError}=useScenario(activeSite,date,time,elapsed);
@@ -203,7 +218,7 @@ export default function App(){
  const addCustom=s=>{setSites(prev=>[...prev,s]);setActiveId(s.id)};
  const onModelLoaded=useCallback(()=>setModelStatus('nasa'),[]);
  const onModelError=useCallback(e=>{setModelStatus('demo');setModelMsg(String(e?.message||e))},[]);
- const shared={modelUrl,modelStatus,data:metric,onLoaded:onModelLoaded,onError:onModelError,date,time,setDate,setTime,elapsed,setElapsed,playing,setPlaying,speed,setSpeed};
+ const shared={modelUrl,modelStatus,data:metric,onLoaded:onModelLoaded,onError:onModelError,date,time,setDate,setTime,elapsed,setElapsed,playing,setPlaying,speed,setSpeed,visualSettings,setVisualSettings};
  return <div className="app-shell">
   <header className="site-nav"><button className="brand" onClick={()=>navigate('home')} aria-label="LUNARIS Home"><span className="crescent">◕</span><span><b>LUNARIS</b><small>LUNAR MISSION PLANNER</small></span></button>
    <nav className={menuOpen?'open':''} aria-label="Main navigation"><button className={page==='home'?'current':''} onClick={()=>navigate('home')}>Home</button><button className={['search','details'].includes(page)?'current':''} onClick={()=>navigate('search')}>Missions</button><button className={page==='compare'?'current':''} onClick={()=>navigate('compare')}>Compare</button><button className={page==='about'?'current':''} onClick={()=>navigate('about')}>About</button></nav>

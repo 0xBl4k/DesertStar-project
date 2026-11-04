@@ -1,9 +1,14 @@
 import React,{useMemo,useRef,useEffect,Suspense,Component} from 'react';
 import {Canvas,useFrame,useLoader,useThree} from '@react-three/fiber';
 import {OrbitControls,Line,Html} from '@react-three/drei';
+import {EffectComposer,Bloom,ToneMapping} from '@react-three/postprocessing';
+import {ToneMappingMode} from 'postprocessing';
 import {GLTFLoader} from 'three/examples/jsm/loaders/GLTFLoader.js';
 import {TextureLoader,Box3,Vector3,Quaternion,Matrix4,Group,Object3D,MathUtils,DataTexture,RGBAFormat,SRGBColorSpace,RepeatWrapping} from 'three';
 import {COLORS} from './data.js';
+import LunarIllumination,{BodyGlow} from './LunarIllumination.jsx';
+import {SCIENTIFIC_VIEW,effectiveScenePreferences} from './scenePreferences.js';
+import {sunVertexShader,sunFragmentShader} from './sceneShaders.js';
 import {markerPosition,nasaModelToScene,mapSphereToScene,sceneCenter,sceneCameraDistance,MOON_SCENE_RADIUS,SUN_RADIUS,EARTH_RADIUS} from './lunarSceneMath.js';
 
 const rotationFor = transform => new Quaternion().setFromRotationMatrix(new Matrix4().makeBasis(
@@ -142,32 +147,24 @@ function createSolarTexture(){
  texture.needsUpdate=true;texture.colorSpace=SRGBColorSpace;texture.wrapS=RepeatWrapping;
  return texture;
 }
-const sunVertexShader='varying vec2 vUv; varying vec3 vNormal; varying vec3 vView; void main(){ vUv=uv; vNormal=normalize(normalMatrix*normal); vec4 p=modelViewMatrix*vec4(position,1.0); vView=-p.xyz; gl_Position=projectionMatrix*p; }';
-const sunFragmentShader=[
- 'uniform sampler2D surface; varying vec2 vUv; varying vec3 vNormal; varying vec3 vView;',
- 'void main(){float mu=max(0.0,dot(normalize(vNormal),normalize(vView)));',
- 'vec3 color=texture2D(surface,vUv).rgb*(0.42+0.58*sqrt(mu))*1.3;',
- 'gl_FragColor=vec4(color,1.0);',
- '#include <tonemapping_fragment>',
- '#include <colorspace_fragment>',
- '}'
-].join('\n');
-function SunBody({position}){
+function SunBody({position,glow}){
  const texture=useMemo(createSolarTexture,[]);
- const uniforms=useMemo(()=>({surface:{value:texture}}),[texture]);
+ const uniforms=useMemo(()=>({surface:{value:texture},radiance:{value:glow?3.5:1.3}}),[texture,glow]);
  useEffect(()=>()=>texture.dispose(),[texture]);
  return <group position={position}>
   <mesh><sphereGeometry args={[SUN_RADIUS,64,40]}/>
-   <shaderMaterial vertexShader={sunVertexShader} fragmentShader={sunFragmentShader} uniforms={uniforms}/></mesh>
+   <shaderMaterial vertexShader={sunVertexShader} fragmentShader={sunFragmentShader} uniforms={uniforms} toneMapped={!glow}/></mesh>
+  {glow&&<BodyGlow radius={SUN_RADIUS*1.45} color="#ffb64b" radiance={3.5}/>}
   <Html position={[0,SUN_RADIUS+.2,0]} center occlude zIndexRange={[3,0]} className="scene-body-label sun-label">SUN</Html>
  </group>;
 }
-function EarthBody({position}){
+function EarthBody({position,glow}){
  const texture=useLoader(TextureLoader,'/assets/earth-day.jpg');
  useMemo(()=>{texture.colorSpace=SRGBColorSpace;texture.anisotropy=4;texture.needsUpdate=true},[texture]);
  return <group position={position}>
   <mesh rotation={[.15,.65,0]}><sphereGeometry args={[EARTH_RADIUS,64,40]}/>
    <meshStandardMaterial map={texture} roughness={.9} metalness={0} emissive="#11243d" emissiveIntensity={.12}/></mesh>
+  {glow&&<BodyGlow radius={EARTH_RADIUS*1.16} color="#58bfff" radiance={4}/>}
   <Html position={[0,EARTH_RADIUS+.2,0]} center occlude zIndexRange={[3,0]} className="scene-body-label earth-label">EARTH</Html>
  </group>;
 }
@@ -181,30 +178,30 @@ function SunLight({geometry}){
   <directionalLight color="#fff0db" intensity={3.1} position={geometry.sunPosition} target={target}/>
  </>;
 }
-function SceneDirections({geometry}){
+function SceneDirections({geometry,settings}){
  const {marker,frame,sunPosition,earthPosition}=geometry;
  return <>
-  <Line points={[marker,sunPosition]} color="#ffd05a" lineWidth={1.6} transparent opacity={.8}/>
-  <Line points={[marker,earthPosition]} color="#43bfff" lineWidth={1.6} transparent opacity={.8}/>
-  <SunBody position={sunPosition}/>
-  <AssetBoundary fallback={<PlainEarth position={earthPosition}/>}>
-   <Suspense fallback={<PlainEarth position={earthPosition}/>}><EarthBody position={earthPosition}/></Suspense>
-  </AssetBoundary>
-  {[['east','X / E','#ff6868'],['north','Y / N','#5ed7ff'],['up','Z / Up','#76ee9a']].map(([key,label,color])=>
+  {settings.showDirectionLines&&<><Line points={[marker,sunPosition]} color="#ffd05a" lineWidth={1.6} transparent opacity={.8}/>
+  <Line points={[marker,earthPosition]} color="#43bfff" lineWidth={1.6} transparent opacity={.8}/></>}
+  {settings.show3DObjects&&<><SunBody position={sunPosition} glow={settings.showSunGlow}/>
+   <AssetBoundary fallback={<PlainEarth position={earthPosition}/>}>
+    <Suspense fallback={<PlainEarth position={earthPosition}/>}><EarthBody position={earthPosition} glow={settings.showEarthGlow}/></Suspense>
+   </AssetBoundary></>}
+  {settings.showAxes&&[['east','X / E','#ff6868'],['north','Y / N','#5ed7ff'],['up','Z / Up','#76ee9a']].map(([key,label,color])=>
    <group key={key}>
     <arrowHelper args={[new Vector3(...frame[key]),new Vector3(...marker),.72,color,.11,.055]}/>
     <Html position={marker.map((v,i)=>v+frame[key][i]*.86)} center occlude zIndexRange={[3,0]} className="scene-axis-label"><span style={{color}}>{label}</span></Html>
    </group>)}
  </>;
 }
-function ZoomRig({enlarged,geometry,viewMode}){
+function ZoomRig({enlarged,geometry,viewMode,settings}){
  const {camera,size,controls}=useThree();
- const center=useMemo(()=>new Vector3(...sceneCenter(geometry)),[geometry]);
+ const center=useMemo(()=>new Vector3(...sceneCenter(geometry,settings)),[geometry,settings]);
  useFrame((_,delta)=>{
   const oldTarget=controls?.target||new Vector3();
   const offset=camera.position.clone().sub(oldTarget);
   const base=viewMode==='home'?7.85:6.75;
-  const fit=geometry?sceneCameraDistance(geometry,offset.toArray(),size.width/size.height,camera.fov,enlarged?1.04:1.18):null;
+  const fit=geometry?sceneCameraDistance(geometry,offset.toArray(),size.width/size.height,camera.fov,enlarged?1.04:1.18,center.toArray(),settings):null;
   const target=fit??(enlarged?base*.8:base);
   const dist=offset.length();
   offset.setLength(target>dist?target:MathUtils.damp(dist,target,3.8,delta));
@@ -215,16 +212,28 @@ function ZoomRig({enlarged,geometry,viewMode}){
  });
  return null;
 }
-export default function MoonScene({modelUrl,onModelLoaded,onModelError,sites,activeId,compareIds=[],onSelect,onSurfaceSelect,focusOnSite=false,zoomable=true,selectedColor,onAnchor,onPositions,clockScene=false,viewMode='default',geometry=null}){
+function CinematicEffects(){
+ const composer=useRef(null);
+ const {gl}=useThree();
+ const supportsHDR=gl.extensions.has('EXT_color_buffer_float');
+ useEffect(()=>{const owned=composer.current;return()=>owned?.dispose()},[]);
+ if(!supportsHDR)return null;
+ return <EffectComposer ref={composer} multisampling={0} enableNormalPass={false}>
+  <Bloom mipmapBlur intensity={.8} luminanceThreshold={1} luminanceSmoothing={.2} radius={.55}/>
+  <ToneMapping mode={ToneMappingMode.ACES_FILMIC}/>
+ </EffectComposer>;
+}
+export default function MoonScene({modelUrl,onModelLoaded,onModelError,sites,activeId,compareIds=[],onSelect,onSurfaceSelect,focusOnSite=false,zoomable=true,selectedColor,onAnchor,onPositions,clockScene=false,viewMode='default',geometry=null,visualSettings=SCIENTIFIC_VIEW}){
  const selected=sites.find(s=>s.id===activeId)||sites[0];
  const [zoom,setZoom]=React.useState(false);
  const geo=clockScene?geometry:null;
+ const settings=useMemo(()=>effectiveScenePreferences(visualSettings),[visualSettings]);
  useEffect(()=>()=>{document.body.style.cursor='auto'},[]);
  return <div className="moon-3d-wrap" onDoubleClick={()=>zoomable&&setZoom(v=>!v)} title={zoomable?'Drag to rotate · Double-click to fit view':'Drag to rotate'}>
   <AssetBoundary fallback={<div className="scene-unavailable" role="status"><strong>3D view unavailable</strong><p>This browser could not start WebGL. Try enabling hardware acceleration or opening LUNARIS in a browser with WebGL support.</p></div>}>
   <Canvas camera={{position:[0,0,7.85],fov:39,near:.1,far:100}} dpr={[1,1.8]} gl={{alpha:true,antialias:true,powerPreference:'high-performance'}}>
-   <ambientLight intensity={geo?.15:.55}/>
-   <hemisphereLight intensity={geo?.06:.21} color="#c7ddff" groundColor="#182c4a"/>
+   <ambientLight intensity={geo?(settings.highContrastShadow?.055:.18):.55}/>
+   <hemisphereLight intensity={geo?(settings.highContrastShadow?.02:.07):.21} color="#c7ddff" groundColor="#182c4a"/>
    {geo?<SunLight geometry={geo}/>:<>
     <directionalLight intensity={2.3} color="#ffe9c6" position={[-3.5,2.5,5.5]}/>
     <directionalLight intensity={.28} color="#3484d3" position={[5,-2,-3]}/>
@@ -235,13 +244,14 @@ export default function MoonScene({modelUrl,onModelLoaded,onModelError,sites,act
     </AssetBoundary>
    </Suspense>
    <MoonSurfacePick onSelect={onSurfaceSelect}/>
-   {sites.map(s=><SceneMarker key={s.id} site={s} selected={s.id===selected?.id||compareIds.includes(s.id)}
+   {(!clockScene||settings.showSiteMarker)&&sites.map(s=><SceneMarker key={s.id} site={s} selected={s.id===selected?.id||compareIds.includes(s.id)}
     color={s.isMapPick?'#ff526c':compareIds.includes(s.id)?COLORS[compareIds.indexOf(s.id)%COLORS.length]:selectedColor} onSelect={onSelect}/>)}
-   {geo&&<SceneDirections geometry={geo}/>}
+   {geo&&<><LunarIllumination geometry={geo} settings={settings}/><SceneDirections geometry={geo} settings={settings}/></>}
    <OrbitControls makeDefault enableZoom={false} enablePan={false} enableDamping dampingFactor={.075} rotateSpeed={.52} minPolarAngle={.08} maxPolarAngle={Math.PI-.08}/>
    <CameraFocus enabled={focusOnSite} site={selected}/>
-   <ZoomRig enlarged={zoom} geometry={geo} viewMode={viewMode}/>
+   <ZoomRig enlarged={zoom} geometry={geo} viewMode={viewMode} settings={settings}/>
    <MarkerTracker sites={sites} activeId={activeId} onPositions={onPositions} onAnchor={onAnchor}/>
+   {geo&&settings.showBloom&&<CinematicEffects/>}
   </Canvas>
   </AssetBoundary>
  </div>;

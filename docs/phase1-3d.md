@@ -74,4 +74,5 @@ interactive 3D camera behavior require a WebGL-enabled browser check. A canvas
 error now leaves the rest of the application usable with a clear fallback.
 
 Terminator overlays, stronger night highlighting, bloom and user effects
-controls belong to the later phases.
+controls are implemented in the following phases; see
+[3D visualization](3d-visualization.md).

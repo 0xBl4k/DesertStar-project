@@ -10,13 +10,16 @@
     "build": "vite build",
     "preview": "vite preview",
     "nasa:download": "node scripts/get-nasa-moon.mjs",
-    "test:api": "node --test tests/*.test.mjs"
+    "test:api": "node --test tests/*.test.mjs",
+    "test:shaders": "node scripts/test-scene-shaders.mjs"
   },
   "dependencies": {
     "@react-three/drei": "^9.122.0",
     "@react-three/fiber": "^8.17.10",
+    "@react-three/postprocessing": "2.19.1",
     "astronomy-engine": "^2.1.19",
     "lucide-react": "^0.468.0",
+    "postprocessing": "6.36.7",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "three": "^0.170.0"
