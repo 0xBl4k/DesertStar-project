@@ -2,11 +2,9 @@
  * API results (not Astronomy Engine guesses) are authoritative for displayed analysis.
  * Presets use terrain-aware science; arbitrary coordinates are geometry-only.
  */
+import {EPHEMERIS_BEGIN, EPHEMERIS_END, HOURS_PER_SCENARIO, HOUR_MS, scenarioTimestamp} from './timeline.js';
+export {EPHEMERIS_BEGIN, EPHEMERIS_END, HOURS_PER_SCENARIO} from './timeline.js';
 const base = (import.meta.env?.VITE_API_URL || '').replace(/\/$/, '');
-export const EPHEMERIS_BEGIN = Date.parse('2026-11-01T00:00:00Z');
-export const EPHEMERIS_END = Date.parse('2027-11-01T00:00:00Z');
-export const HOURS_PER_SCENARIO = 72;
-const HOUR_MS = 3600000;
 const cache = new Map();
 
 export const emptyMetric = () => ({
@@ -38,10 +36,10 @@ export async function loadHealth() {
 
 function buildRequest(site, date, time) {
   if (!site) throw new Error('Choose a landing site.');
-  const stamp = Date.parse(`${date}T${time}:00Z`);
-  if (!Number.isFinite(stamp)) throw new Error('Enter a valid UTC date and time.');
+  const stamp = scenarioTimestamp(date, time);
+  if (stamp === null) throw new Error('Enter a valid UTC date and time.');
   if (stamp < EPHEMERIS_BEGIN || stamp + HOURS_PER_SCENARIO * HOUR_MS > EPHEMERIS_END) {
-    throw new Error('A 72-hour analysis must fit between 2026-11-01 and 2027-11-01 UTC.');
+    throw new Error('A full lunar cycle (709-hour analysis) must fit between 2026-11-01 and 2027-11-01 UTC.');
   }
   const payload = {
     start_utc: new Date(stamp).toISOString(),
@@ -75,6 +73,13 @@ export function getScenario(site, date, time) {
     if (!response.ok) throw new Error(detailOf(json, `Visibility HTTP ${response.status}`));
     if (!Array.isArray(json.samples) || json.samples.length === 0) {
       throw new Error('Backend returned no position samples.');
+    }
+    const samples = json.samples;
+    if (samples[0].t !== 0 || samples[samples.length - 1].t !== HOURS_PER_SCENARIO * 60 ||
+        samples.some((sample, index) => !Number.isFinite(sample.t) ||
+          (index > 0 && sample.t <= samples[index - 1].t) ||
+          ![sample.sun?.el, sample.sun?.az, sample.earth?.el, sample.earth?.az].every(Number.isFinite))) {
+      throw new Error('Backend samples do not cover the full lunar cycle.');
     }
     return json;
   })();

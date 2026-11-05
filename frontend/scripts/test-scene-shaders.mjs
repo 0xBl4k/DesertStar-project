@@ -2,11 +2,11 @@
 import {spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {OrthographicCamera,Vector2,Vector3,Sphere,SphereGeometry,Raycaster,Matrix3,ShaderChunk} from 'three';
-import {lunarMaskVertex,lunarMaskFragment,glowVertex,glowFragment,sunVertexShader,sunFragmentShader} from '../src/sceneShaders.js';
+import {lunarMaskVertex,lunarMaskFragment,glowVertex,glowFragment,sunVertexShader,sunFragmentShader,earthShellVertex,atmosphereFragment,cloudsFragment} from '../src/sceneShaders.js';
 import {resolveLunarScene} from '../src/lunarEphemeris.js';
 
 const prefix='precision highp float;\nprecision highp int;\n';
-const vertexPrefix=prefix+'uniform mat4 modelMatrix; uniform mat4 modelViewMatrix; uniform mat4 projectionMatrix; uniform mat3 normalMatrix; attribute vec3 position; attribute vec3 normal; attribute vec2 uv;\n';
+const vertexPrefix=prefix+'uniform vec3 cameraPosition; uniform mat4 modelMatrix; uniform mat4 modelViewMatrix; uniform mat4 projectionMatrix; uniform mat3 normalMatrix; attribute vec3 position; attribute vec3 normal; attribute vec2 uv;\n';
 // Render into a linear offscreen target, as the bloom composer does.
 const fragmentPrefix=prefix+'vec4 linearToOutputTexel(vec4 value){return value;}\n';
 const includes=source=>source.replace(/#include <(\w+)>/g,(_,name)=>includes(ShaderChunk[name]));
@@ -27,11 +27,13 @@ for(const date of ['2026-11-01','2026-11-15','2026-11-24','2026-12-24']){
    if(Math.abs(cosine)<.08)continue;
    expected.push({x,y,night:cosine<0});
   }
-  cases.push({name:date+' / '+view.join(','),sun,view:camera.matrixWorldInverse.toArray(),projection:camera.projectionMatrix.toArray(),normal:new Matrix3().getNormalMatrix(camera.matrixWorldInverse).toArray(),expected});
+  cases.push({name:date+' / '+view.join(','),sun,camera:view,view:camera.matrixWorldInverse.toArray(),projection:camera.projectionMatrix.toArray(),normal:new Matrix3().getNormalMatrix(camera.matrixWorldInverse).toArray(),expected});
  }
 }
-const data={programs:{mask:pair(lunarMaskVertex,lunarMaskFragment),glow:pair(glowVertex,glowFragment),sun:pair(sunVertexShader,sunFragmentShader)},positions:Array.from(sphere.attributes.position.array),normals:Array.from(sphere.attributes.normal.array),uv:Array.from(sphere.attributes.uv.array),indices:Array.from(sphere.index.array),cases};
-const run=spawnSync(process.env.PYTHON||'python3',[fileURLToPath(new URL('./verify-scene-shaders.py',import.meta.url))],{input:JSON.stringify(data),encoding:'utf8',maxBuffer:4*1024*1024});
+const data={programs:{mask:pair(lunarMaskVertex,lunarMaskFragment),glow:pair(glowVertex,glowFragment),sun:pair(sunVertexShader,sunFragmentShader),atmosphere:pair(earthShellVertex,atmosphereFragment),clouds:pair(earthShellVertex,cloudsFragment)},positions:Array.from(sphere.attributes.position.array),normals:Array.from(sphere.attributes.normal.array),uv:Array.from(sphere.attributes.uv.array),indices:Array.from(sphere.index.array),cases};
+const args=[fileURLToPath(new URL('./verify-scene-shaders.py',import.meta.url))];
+if(process.env.SHADER_PREVIEW_DIR)args.push(process.env.SHADER_PREVIEW_DIR);
+const run=spawnSync(process.env.PYTHON||'python3',args,{input:JSON.stringify(data),encoding:'utf8',maxBuffer:4*1024*1024});
 sphere.dispose();
 if(run.stdout)process.stdout.write(run.stdout);
 if(run.stderr)process.stderr.write(run.stderr);

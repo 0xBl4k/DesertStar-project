@@ -53,3 +53,15 @@ test('saved input accepts only known boolean preferences',()=>{
  assert.equal(value.showAxes,false);assert.equal(value.showEffects,true);assert.equal(value.unknown,undefined);
  for(const invalid of [null,[],true,'cinematic'])assert.deepEqual(normalizeScenePreferences(invalid),viewPreset('scientific'));
 });
+
+
+test('Earth sky survives old saved settings and is independent from decorative glow',()=>{
+ const old={mode:'scientific',showEffects:false};
+ const sky=effectiveScenePreferences(old);
+ assert.equal(sky.showEarthAtmosphere,true);assert.equal(sky.showEarthClouds,true);
+ assert.equal(sky.showEarthGlow,false);
+ const hidden=effectiveScenePreferences({...old,show3DObjects:false});
+ assert.equal(hidden.showEarthAtmosphere,false);assert.equal(hidden.showEarthClouds,false);
+ const off=updateScenePreference(sky,'showEarthAtmosphere',false);
+ assert.equal(off.showEarthAtmosphere,false);assert.equal(off.showEarthClouds,true);
+});

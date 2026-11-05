@@ -4,11 +4,13 @@ import {OrbitControls,Line,Html} from '@react-three/drei';
 import {EffectComposer,Bloom,ToneMapping} from '@react-three/postprocessing';
 import {ToneMappingMode} from 'postprocessing';
 import {GLTFLoader} from 'three/examples/jsm/loaders/GLTFLoader.js';
-import {TextureLoader,Box3,Vector3,Quaternion,Matrix4,Group,Object3D,MathUtils,DataTexture,RGBAFormat,SRGBColorSpace,RepeatWrapping} from 'three';
+import {TextureLoader,Box3,Vector3,Quaternion,Matrix4,Group,Object3D,MathUtils,SRGBColorSpace,BackSide,AdditiveBlending} from 'three';
 import {COLORS} from './data.js';
 import LunarIllumination,{BodyGlow} from './LunarIllumination.jsx';
 import {SCIENTIFIC_VIEW,effectiveScenePreferences} from './scenePreferences.js';
-import {sunVertexShader,sunFragmentShader} from './sceneShaders.js';
+import {sunVertexShader,sunFragmentShader,earthShellVertex,atmosphereFragment,cloudsFragment} from './sceneShaders.js';
+import {Body} from 'astronomy-engine';
+import {celestialOrientation} from './celestialOrientation.js';
 import {markerPosition,nasaModelToScene,mapSphereToScene,sceneCenter,sceneCameraDistance,MOON_SCENE_RADIUS,SUN_RADIUS,EARTH_RADIUS} from './lunarSceneMath.js';
 
 const rotationFor = transform => new Quaternion().setFromRotationMatrix(new Matrix4().makeBasis(
@@ -135,36 +137,36 @@ function MoonSurfacePick({onSelect}){
  </mesh>;
 }
 
-function createSolarTexture(){
- const width=256,height=128,data=new Uint8Array(width*height*4);
- for(let y=0;y<height;y++)for(let x=0;x<width;x++){
-  const u=x/width,v=y/height,at=(y*width+x)*4;
-  const waves=Math.sin(u*Math.PI*24+Math.sin(v*15)*2)*.35+
-   Math.sin(v*55+u*Math.PI*12)*.28+Math.sin(u*Math.PI*40+v*105)*.18;
-  data[at]=255;data[at+1]=Math.round(180+38*waves);data[at+2]=Math.round(54+31*waves);data[at+3]=255;
- }
- const texture=new DataTexture(data,width,height,RGBAFormat);
- texture.needsUpdate=true;texture.colorSpace=SRGBColorSpace;texture.wrapS=RepeatWrapping;
- return texture;
-}
-function SunBody({position,glow}){
- const texture=useMemo(createSolarTexture,[]);
- const uniforms=useMemo(()=>({surface:{value:texture},radiance:{value:glow?3.5:1.3}}),[texture,glow]);
- useEffect(()=>()=>texture.dispose(),[texture]);
+function SunBody({position,glow,timestamp}){
+ const orientation=useMemo(()=>celestialOrientation(Body.Sun,timestamp),[timestamp]);
+ const uniforms=useMemo(()=>({radiance:{value:glow?2.6:1.3}}),[glow]);
  return <group position={position}>
-  <mesh><sphereGeometry args={[SUN_RADIUS,64,40]}/>
+  <mesh quaternion={orientation}><sphereGeometry args={[SUN_RADIUS,64,40]}/>
    <shaderMaterial vertexShader={sunVertexShader} fragmentShader={sunFragmentShader} uniforms={uniforms} toneMapped={!glow}/></mesh>
   {glow&&<BodyGlow radius={SUN_RADIUS*1.45} color="#ffb64b" radiance={3.5}/>}
   <Html position={[0,SUN_RADIUS+.2,0]} center occlude zIndexRange={[3,0]} className="scene-body-label sun-label">SUN</Html>
  </group>;
 }
-function EarthBody({position,glow}){
+function EarthBody({position,settings,timestamp,sunDirection}){
  const texture=useLoader(TextureLoader,'/assets/earth-day.jpg');
  useMemo(()=>{texture.colorSpace=SRGBColorSpace;texture.anisotropy=4;texture.needsUpdate=true},[texture]);
+ const orientation=useMemo(()=>celestialOrientation(Body.Earth,timestamp),[timestamp]);
+ const uniforms=useMemo(()=>({sunDirection:{value:new Vector3(...sunDirection)}}),[sunDirection]);
+ const cloudDrift=Number.isFinite(timestamp)?((timestamp-Date.UTC(2026,10,1))/86400000*.035)%(Math.PI*2):0;
  return <group position={position}>
-  <mesh rotation={[.15,.65,0]}><sphereGeometry args={[EARTH_RADIUS,64,40]}/>
-   <meshStandardMaterial map={texture} roughness={.9} metalness={0} emissive="#11243d" emissiveIntensity={.12}/></mesh>
-  {glow&&<BodyGlow radius={EARTH_RADIUS*1.16} color="#58bfff" radiance={4}/>}
+  <group quaternion={orientation}>
+   <mesh><sphereGeometry args={[EARTH_RADIUS,64,40]}/>
+    <meshStandardMaterial map={texture} roughness={.85} metalness={0} emissive="#11243d" emissiveIntensity={.08}/></mesh>
+   {settings.showEarthClouds&&<mesh rotation={[0,cloudDrift,0]} renderOrder={1}>
+    <sphereGeometry args={[EARTH_RADIUS*1.012,64,40]}/>
+    <shaderMaterial vertexShader={earthShellVertex} fragmentShader={cloudsFragment} uniforms={uniforms} transparent depthWrite={false}/>
+   </mesh>}
+  </group>
+  {settings.showEarthAtmosphere&&<mesh renderOrder={2}>
+   <sphereGeometry args={[EARTH_RADIUS*1.055,64,40]}/>
+   <shaderMaterial vertexShader={earthShellVertex} fragmentShader={atmosphereFragment} uniforms={uniforms} transparent depthWrite={false} side={BackSide} blending={AdditiveBlending} toneMapped={false}/>
+  </mesh>}
+  {settings.showEarthGlow&&<BodyGlow radius={EARTH_RADIUS*1.16} color="#58bfff" radiance={4}/>}
   <Html position={[0,EARTH_RADIUS+.2,0]} center occlude zIndexRange={[3,0]} className="scene-body-label earth-label">EARTH</Html>
  </group>;
 }
@@ -178,14 +180,14 @@ function SunLight({geometry}){
   <directionalLight color="#fff0db" intensity={3.1} position={geometry.sunPosition} target={target}/>
  </>;
 }
-function SceneDirections({geometry,settings}){
+function SceneDirections({geometry,settings,timestamp}){
  const {marker,frame,sunPosition,earthPosition}=geometry;
  return <>
   {settings.showDirectionLines&&<><Line points={[marker,sunPosition]} color="#ffd05a" lineWidth={1.6} transparent opacity={.8}/>
   <Line points={[marker,earthPosition]} color="#43bfff" lineWidth={1.6} transparent opacity={.8}/></>}
-  {settings.show3DObjects&&<><SunBody position={sunPosition} glow={settings.showSunGlow}/>
+  {settings.show3DObjects&&<><SunBody position={sunPosition} glow={settings.showSunGlow} timestamp={timestamp}/>
    <AssetBoundary fallback={<PlainEarth position={earthPosition}/>}>
-    <Suspense fallback={<PlainEarth position={earthPosition}/>}><EarthBody position={earthPosition} glow={settings.showEarthGlow}/></Suspense>
+    <Suspense fallback={<PlainEarth position={earthPosition}/>}><EarthBody position={earthPosition} settings={settings} timestamp={timestamp} sunDirection={geometry.sunDirection}/></Suspense>
    </AssetBoundary></>}
   {settings.showAxes&&[['east','X / E','#ff6868'],['north','Y / N','#5ed7ff'],['up','Z / Up','#76ee9a']].map(([key,label,color])=>
    <group key={key}>
@@ -223,7 +225,7 @@ function CinematicEffects(){
   <ToneMapping mode={ToneMappingMode.ACES_FILMIC}/>
  </EffectComposer>;
 }
-export default function MoonScene({modelUrl,onModelLoaded,onModelError,sites,activeId,compareIds=[],onSelect,onSurfaceSelect,focusOnSite=false,zoomable=true,selectedColor,onAnchor,onPositions,clockScene=false,viewMode='default',geometry=null,visualSettings=SCIENTIFIC_VIEW}){
+export default function MoonScene({modelUrl,onModelLoaded,onModelError,sites,activeId,compareIds=[],onSelect,onSurfaceSelect,focusOnSite=false,zoomable=true,selectedColor,onAnchor,onPositions,clockScene=false,viewMode='default',geometry=null,timestamp=null,visualSettings=SCIENTIFIC_VIEW}){
  const selected=sites.find(s=>s.id===activeId)||sites[0];
  const [zoom,setZoom]=React.useState(false);
  const geo=clockScene?geometry:null;
@@ -246,7 +248,7 @@ export default function MoonScene({modelUrl,onModelLoaded,onModelError,sites,act
    <MoonSurfacePick onSelect={onSurfaceSelect}/>
    {(!clockScene||settings.showSiteMarker)&&sites.map(s=><SceneMarker key={s.id} site={s} selected={s.id===selected?.id||compareIds.includes(s.id)}
     color={s.isMapPick?'#ff526c':compareIds.includes(s.id)?COLORS[compareIds.indexOf(s.id)%COLORS.length]:selectedColor} onSelect={onSelect}/>)}
-   {geo&&<><LunarIllumination geometry={geo} settings={settings}/><SceneDirections geometry={geo} settings={settings}/></>}
+   {geo&&<><LunarIllumination geometry={geo} settings={settings}/><SceneDirections geometry={geo} settings={settings} timestamp={timestamp}/></>}
    <OrbitControls makeDefault enableZoom={false} enablePan={false} enableDamping dampingFactor={.075} rotateSpeed={.52} minPolarAngle={.08} maxPolarAngle={Math.PI-.08}/>
    <CameraFocus enabled={focusOnSite} site={selected}/>
    <ZoomRig enlarged={zoom} geometry={geo} viewMode={viewMode} settings={settings}/>

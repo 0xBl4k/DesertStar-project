@@ -24,3 +24,5 @@
 .field-date .lunaris-picker,.field-time .lunaris-picker{flex:1 1 auto}
 .scenario-date-fields .lunaris-picker-trigger{min-height:33px;font-size:11px;padding:5px 6px}
 @media(max-width:500px){.lunaris-picker-trigger{font-size:11px;padding:5px 6px}.lunaris-picker-popup{padding:10px}.lunaris-calendar-grid button{min-height:31px}}
+
+.lunaris-time-apply:disabled{opacity:.45;cursor:not-allowed}

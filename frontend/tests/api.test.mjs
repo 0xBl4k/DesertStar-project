@@ -2,14 +2,15 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {getScenario, metricAt, geometryEstimate, loadSiteCatalog} from '../src/api.js';
 import {SITES} from '../src/data.js';
+import {HOURS_PER_SCENARIO,EPHEMERIS_END,LATEST_SCENARIO_START} from '../src/timeline.js';
 
 const response = body => ({ok: true, json: async () => body});
 const fakeResult = (status='terrain_visibility') => ({
   status, start_utc:'2026-11-15T00:00:00+00:00', step_minutes:60,
-  sun_windows: status === 'terrain_visibility' ? [{start:'2026-11-15T00:00:00+00:00',end:'2026-11-18T00:00:00+00:00'}] : null,
-  earth_windows: status === 'terrain_visibility' ? [{start:'2026-11-15T12:30:00+00:00',end:'2026-11-18T00:00:00+00:00'}] : null,
-  samples: Array.from({length:73}, (_, i) => ({t:i*60,
-    sun:{el:1+i/100,az:260-i, ...(status==='terrain_visibility'?{visible:true}:{})},
+  sun_windows: status === 'terrain_visibility' ? [{start:'2026-11-15T00:00:00+00:00',end:'2026-12-14T13:00:00+00:00'}] : null,
+  earth_windows: status === 'terrain_visibility' ? [{start:'2026-11-15T12:30:00+00:00',end:'2026-12-14T13:00:00+00:00'}] : null,
+  samples: Array.from({length:HOURS_PER_SCENARIO+1}, (_, i) => ({t:i*60,
+    sun:{el:1+i/100,az:(620-i%360)%360, ...(status==='terrain_visibility'?{visible:true}:{})},
     earth:{el:-4+i/10,az:135-i/10, ...(status==='terrain_visibility'?{visible:i>=13}:{})},
   })),
 });
@@ -21,7 +22,7 @@ test('scientific presets are explicitly mapped and invalid sentinel site is not 
  assert.ok(!sites.some(s=>s.backendSiteId==='Site01_lowest_point'));
 });
 
-test('preset request uses backend site_id and 72h UTC window', async () => {
+test('preset request uses backend site_id and full-cycle UTC window', async () => {
  let payload;
  globalThis.fetch=async (url, opts)=>{
    assert.ok(url.endsWith('/api/visibility'));
@@ -33,16 +34,16 @@ test('preset request uses backend site_id and 72h UTC window', async () => {
  assert.equal(payload.mode,'preset');
  assert.equal(payload.site_id,'Site01_highest_point');
  assert.equal(payload.start_utc,'2026-11-15T00:00:00.000Z');
- assert.equal(payload.end_utc,'2026-11-18T00:00:00.000Z');
+ assert.equal(payload.end_utc,'2026-12-14T13:00:00.000Z');
  assert.equal(payload.step_minutes,60);
  const at12=metricAt(data,12);
  const at13=metricAt(data,13);
  assert.equal(at12.earthVisible,false);
  assert.equal(at13.earthVisible,true);
- assert.equal(at13.sunHours,72);
- assert.equal(at13.earthHours,59.5);
- assert.equal(at13.bothHours,59.5);
- assert.equal(metricAt(data,72).sunVisible,true);
+ assert.equal(at13.sunHours,HOURS_PER_SCENARIO);
+ assert.equal(at13.earthHours,HOURS_PER_SCENARIO-12.5);
+ assert.equal(at13.bothHours,HOURS_PER_SCENARIO-12.5);
+ assert.equal(metricAt(data,HOURS_PER_SCENARIO).sunVisible,true);
 });
 
 test('Artemis regional site uses backend elevations for clearly marked geometry estimates', async () => {
@@ -57,18 +58,18 @@ test('Artemis regional site uses backend elevations for clearly marked geometry 
  assert.equal(metric.mode,'geometry');
  assert.equal(metric.sunVisible,true);
  assert.equal(metric.earthVisible,false);
- assert.equal(metric.sunHours,72);
- assert.equal(metric.earthHours,32);
- assert.equal(metric.bothHours,32);
+ assert.equal(metric.sunHours,HOURS_PER_SCENARIO);
+ assert.equal(metric.earthHours,HOURS_PER_SCENARIO-40);
+ assert.equal(metric.bothHours,HOURS_PER_SCENARIO-40);
  assert.equal(metric.referenceHorizonDeg,0);
  assert.equal(data.sun_windows,null);
  assert.equal(data.summary,undefined);
  assert.ok(Number.isFinite(metric.sun.altitude));
 });
 
-test('out-of-coverage 72h period fails before contacting backend', async () => {
+test('out-of-coverage full-cycle period fails before contacting backend', async () => {
  globalThis.fetch=()=>{throw new Error('Should not be called')};
- await assert.rejects(getScenario(SITES[0],'2027-10-31','00:00'),/72-hour analysis/);
+ await assert.rejects(getScenario(SITES[0],'2027-10-31','00:00'),/709-hour analysis/);
 });
 
 test('invalid API errors are propagated and not cached forever', async () => {
@@ -94,7 +95,7 @@ test('geometry crossing times interpolate accurately from backend elevations', (
  });
  const est=geometryEstimate(result);
  assert.equal(est.terrain_included,false);
- assert.equal(est.sun_hours,35.5);
+ assert.equal(est.sun_hours,HOURS_PER_SCENARIO-36.5);
  assert.equal(est.earth_hours,20.5);
  assert.equal(est.both_hours,0);
  assert.equal(est.sun_windows[0].start,'2026-11-16T12:30:00.000Z');
@@ -138,4 +139,29 @@ test('preset terrain windows remain authoritative, even when elevation is positi
  assert.equal(metric.sunHours,0);
  assert.equal(metric.earthHours,0);
  assert.equal(geometryEstimate(result),null);
+});
+
+
+test('positions keep updating past hour 72 and reach the exact final sample',()=>{
+ const result=fakeResult();
+ assert.ok(metricAt(result,300).sun.altitude>metricAt(result,72).sun.altitude);
+ const end=metricAt(result,HOURS_PER_SCENARIO);
+ assert.equal(end.sun.altitude,result.samples.at(-1).sun.el);
+ assert.equal(end.earth.altitude,result.samples.at(-1).earth.el);
+ assert.deepEqual(metricAt(result,9999),end);
+});
+
+test('last possible full-cycle request includes the ephemeris endpoint exactly',async()=>{
+ let payload;
+ globalThis.fetch=async(_url,options)=>{payload=JSON.parse(options.body);return response(fakeResult());};
+ const last=new Date(LATEST_SCENARIO_START).toISOString();
+ await getScenario({lat:-81.123,lon:22.789},last.slice(0,10),last.slice(11,16));
+ assert.equal(Date.parse(payload.end_utc),EPHEMERIS_END);
+ globalThis.fetch=()=>{throw new Error('Should not contact backend')};
+ await assert.rejects(getScenario({lat:-81.123,lon:22.789},last.slice(0,10),'11:01'),/709-hour analysis/);
+});
+
+test('a truncated 72-hour response is rejected instead of freezing the rest of the month',async()=>{
+ globalThis.fetch=async()=>response({...fakeResult(),samples:fakeResult().samples.slice(0,73)});
+ await assert.rejects(getScenario({lat:-82.777,lon:42},'2026-12-01','00:00'),/full lunar cycle/);
 });

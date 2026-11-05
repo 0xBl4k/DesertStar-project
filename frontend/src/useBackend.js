@@ -1,7 +1,7 @@
 import {useEffect, useMemo, useState} from 'react';
 import {getScenario, metricAt, emptyMetric, scenarioKey} from './api.js';
 
-/** One request for the whole 72-hour period. Playback only reads local samples. */
+/** One request for the whole lunar phase cycle. Playback only reads local samples. */
 export function useScenario(site, date, time, elapsed = 0) {
   const key = scenarioKey(site, date, time);
   const [state, setState] = useState({key: null, data: null, error: null});

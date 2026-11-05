@@ -104,7 +104,7 @@ def run(data):
     def render(name, case, hatch=0):
         program = programs[name]
         use(program)
-        cull(0x0404 if name == 'glow' else 0x0405)
+        cull(0x0404 if name in ('glow', 'atmosphere') else 0x0405)
         for key, label, size in [('positions', b'position', 3), ('normals', b'normal', 3), ('uv', b'uv', 2)]:
             index = attribute(program, label)
             if index < 0:
@@ -117,6 +117,7 @@ def run(data):
             matrix4(uniform(program, key.encode()), 1, 0, (c.c_float * 16)(*values))
         matrix3(uniform(program, b'normalMatrix'), 1, 0, (c.c_float * 9)(*case['normal']))
         vector3(uniform(program, b'sunDirection'), *case['sun'])
+        vector3(uniform(program, b'cameraPosition'), *case['camera'])
         vector3(uniform(program, b'nightColor'), .01, .03, .07)
         vector3(uniform(program, b'glowColor'), .2, .6, 1.)
         scalar(uniform(program, b'strength'), .78)
@@ -142,7 +143,29 @@ def run(data):
     assert sum(a != b for a, b in zip(plain, hatched)) > 100, 'Night hatching had no rendered effect'
     glow = render('glow', data['cases'][0])
     assert max(glow[3::4]) > 30, 'Glow shader did not render a rim'
-    print(json.dumps({'shader_programs_compiled': list(programs), 'ephemeris_camera_cases': len(data['cases']), 'day_night_pixel_checks': checked, 'hatching_and_glow': 'passed', 'egl_version': [major.value, minor.value]}))
+    # Render each new material, not just compile it. Texture variations must
+    # survive while the atmosphere responds to illumination and leaves its center clear.
+    case = dict(data['cases'][0], sun=[0, 0, 1])
+    sun = render('sun', case)
+    assert sun[(64*128+64)*4+3] == 255, 'Sun disk is missing'
+    inner = [tuple(sun[(y*128+x)*4:(y*128+x)*4+3]) for y in range(38,91) for x in range(38,91)]
+    assert len(set(inner)) > 150, 'Solar granulation has no surface detail'
+    assert sun[(64*128+64)*4+1] > sun[(64*128+119)*4+1], 'Solar limb darkening is missing'
+    clouds = render('clouds', case)
+    assert max(clouds[3::4]) > 80 and clouds[3::4].count(0) > 1000, 'Cloud coverage has no gaps or wisps'
+    atmosphere = render('atmosphere', case)
+    assert atmosphere[(64*128+64)*4+3] < 4 and max(atmosphere[3::4]) > 30, 'Atmosphere has no thin rim'
+    dark = render('atmosphere', dict(case, sun=[0,0,-1]))
+    assert atmosphere != dark, 'Atmosphere ignores the Sun direction'
+    # Optional image dump for visual inspection, without extra dependencies.
+    if len(sys.argv) > 1:
+        from pathlib import Path
+        folder=Path(sys.argv[1]); folder.mkdir(parents=True,exist_ok=True)
+        for name in ['sun','clouds','atmosphere']:
+            pixels=render(name,case)
+            rgb=bytes(channel for row in range(127,-1,-1) for col in range(128) for channel in pixels[(row*128+col)*4:(row*128+col)*4+3])
+            (folder/(name+'.ppm')).write_bytes(b'P6\n128 128\n255\n'+rgb)
+    print(json.dumps({'shader_programs_compiled': list(programs), 'ephemeris_camera_cases': len(data['cases']), 'day_night_pixel_checks': checked, 'hatching_and_glow': 'passed', 'solar_detail_clouds_atmosphere': 'passed', 'egl_version': [major.value, minor.value]}))
     bind('eglMakeCurrent', c.c_uint, c.c_void_p, c.c_void_p, c.c_void_p, c.c_void_p)(display, None, None, None)
     bind('eglDestroyContext', c.c_uint, c.c_void_p, c.c_void_p)(display, context)
     bind('eglDestroySurface', c.c_uint, c.c_void_p, c.c_void_p)(display, surface)

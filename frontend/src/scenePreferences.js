@@ -2,6 +2,7 @@ export const SCENE_PREFERENCES_KEY = 'lunaris.scene-preferences.v1';
 
 const shared = {
   show3DObjects: true, showSiteMarker: true,
+  showEarthAtmosphere: true, showEarthClouds: true,
   showSunGlow: true, showEarthGlow: true, showBloom: true, showHatching: false,
 };
 export const SCIENTIFIC_VIEW = Object.freeze({
@@ -32,6 +33,8 @@ export function normalizeScenePreferences(value) {
 
 export function effectiveScenePreferences(value) {
   const result = normalizeScenePreferences(value);
+  result.showEarthAtmosphere = result.show3DObjects && result.showEarthAtmosphere;
+  result.showEarthClouds = result.show3DObjects && result.showEarthClouds;
   result.showSunGlow = result.showEffects && result.show3DObjects && result.showSunGlow;
   result.showEarthGlow = result.showEffects && result.show3DObjects && result.showEarthGlow;
   result.showBloom = result.showEffects && result.showBloom && (result.showSunGlow || result.showEarthGlow);

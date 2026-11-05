@@ -111,7 +111,7 @@ export function visibleSceneSpheres(geometry, settings = {}) {
   const bodies = [{center: [0, 0, 0], radius: geometry.radius + .014}];
   if (settings.show3DObjects !== false) {
     bodies.push({center: geometry.sunPosition, radius: SUN_RADIUS * (settings.showSunGlow ? 1.45 : 1)});
-    bodies.push({center: geometry.earthPosition, radius: EARTH_RADIUS * (settings.showEarthGlow ? 1.16 : 1)});
+    bodies.push({center: geometry.earthPosition, radius: EARTH_RADIUS * (settings.showEarthGlow ? 1.16 : settings.showEarthAtmosphere ? 1.055 : settings.showEarthClouds ? 1.012 : 1)});
   } else if (settings.showDirectionLines !== false) {
     bodies.push({center: geometry.sunPosition, radius: .02}, {center: geometry.earthPosition, radius: .02});
   }
