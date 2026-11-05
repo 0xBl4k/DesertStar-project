@@ -22,11 +22,11 @@ def run(data):
     major, minor = c.c_int(), c.c_int()
     assert bind('eglInitialize', c.c_uint, c.c_void_p, c.POINTER(c.c_int), c.POINTER(c.c_int))(display, c.byref(major), c.byref(minor)), 'EGL could not initialize'
     assert bind('eglBindAPI', c.c_uint, c.c_uint)(0x30A0), 'OpenGL ES is unavailable'
-    attributes = (c.c_int * 15)(0x3033, 1, 0x3040, 4, 0x3024, 8, 0x3023, 8, 0x3022, 8, 0x3021, 8, 0x3025, 24, 0x3038)
+    attributes = (c.c_int * 15)(0x3033, 1, 0x3040, 0x40, 0x3024, 8, 0x3023, 8, 0x3022, 8, 0x3021, 8, 0x3025, 24, 0x3038)
     config, count = c.c_void_p(), c.c_int()
     assert bind('eglChooseConfig', c.c_uint, c.c_void_p, c.POINTER(c.c_int), c.POINTER(c.c_void_p), c.c_int, c.POINTER(c.c_int))(display, attributes, c.byref(config), 1, c.byref(count)) and count.value, 'No offscreen EGL config'
     surface = bind('eglCreatePbufferSurface', c.c_void_p, c.c_void_p, c.c_void_p, c.POINTER(c.c_int))(display, config, (c.c_int * 5)(0x3057, 128, 0x3056, 128, 0x3038))
-    context = bind('eglCreateContext', c.c_void_p, c.c_void_p, c.c_void_p, c.c_void_p, c.POINTER(c.c_int))(display, config, None, (c.c_int * 3)(0x3098, 2, 0x3038))
+    context = bind('eglCreateContext', c.c_void_p, c.c_void_p, c.c_void_p, c.c_void_p, c.POINTER(c.c_int))(display, config, None, (c.c_int * 3)(0x3098, 3, 0x3038))
     assert surface and context, 'No offscreen OpenGL ES context'
     assert bind('eglMakeCurrent', c.c_uint, c.c_void_p, c.c_void_p, c.c_void_p, c.c_void_p)(display, surface, surface, context)
     get_proc = bind('eglGetProcAddress', c.c_void_p, c.c_char_p)
@@ -81,6 +81,23 @@ def run(data):
         bind_buffer(target, buffer)
         buffer_data(target, c.sizeof(array), array, 0x88E4)
         buffers[name] = buffer
+    # Use the exact bundled NASA textures, not synthetic test textures.
+    from PIL import Image
+    textures={}
+    gen_textures=gl('glGenTextures',None,c.c_int,c.POINTER(c.c_uint))
+    bind_texture=gl('glBindTexture',None,c.c_uint,c.c_uint)
+    active_texture=gl('glActiveTexture',None,c.c_uint)
+    tex_parameter=gl('glTexParameteri',None,c.c_uint,c.c_uint,c.c_int)
+    tex_image=gl('glTexImage2D',None,c.c_uint,c.c_int,c.c_int,c.c_int,c.c_int,c.c_int,c.c_uint,c.c_uint,c.c_void_p)
+    def upload_texture(name,unit,image):
+        texture=c.c_uint();gen_textures(1,c.byref(texture));active_texture(0x84C0+unit);bind_texture(0x0DE1,texture)
+        for parameter,value in [(0x2801,0x2601),(0x2800,0x2601),(0x2802,0x812F),(0x2803,0x812F)]:tex_parameter(0x0DE1,parameter,value)
+        image=image.convert('RGBA').transpose(Image.Transpose.FLIP_TOP_BOTTOM)
+        pixels=c.create_string_buffer(image.tobytes());tex_image(0x0DE1,0,0x1908,*image.size,0,0x1908,0x1401,pixels)
+        textures[name]=(unit,texture)
+    for unit,name in enumerate(['sun','clouds','moon']):upload_texture(name,unit,Image.open(data['assets'][name]))
+    upload_texture('clearShadow',3,Image.new('RGBA',(2,2),(255,255,255,255)))
+    upload_texture('blockedShadow',4,Image.new('RGBA',(2,2),(0,0,0,0)))
     enable = gl('glEnable', None, c.c_uint)
     enable(0x0B71)
     enable(0x0B44)
@@ -94,6 +111,7 @@ def run(data):
     matrix3 = gl('glUniformMatrix3fv', None, c.c_int, c.c_int, c.c_uint, c.POINTER(c.c_float))
     vector3 = gl('glUniform3f', None, c.c_int, c.c_float, c.c_float, c.c_float)
     scalar = gl('glUniform1f', None, c.c_int, c.c_float)
+    integer = gl('glUniform1i',None,c.c_int,c.c_int)
     clear_color = gl('glClearColor', None, c.c_float, c.c_float, c.c_float, c.c_float)
     clear = gl('glClear', None, c.c_uint)
     viewport = gl('glViewport', None, c.c_int, c.c_int, c.c_int, c.c_int)
@@ -101,7 +119,7 @@ def run(data):
     read = gl('glReadPixels', None, c.c_int, c.c_int, c.c_int, c.c_int, c.c_uint, c.c_uint, c.c_void_p)
     identity = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]
 
-    def render(name, case, hatch=0):
+    def render(name, case, hatch=0, blocked=False):
         program = programs[name]
         use(program)
         cull(0x0404 if name in ('glow', 'atmosphere') else 0x0405)
@@ -116,6 +134,27 @@ def run(data):
         for key, values in [('modelMatrix', identity), ('modelViewMatrix', case['view']), ('projectionMatrix', case['projection'])]:
             matrix4(uniform(program, key.encode()), 1, 0, (c.c_float * 16)(*values))
         matrix3(uniform(program, b'normalMatrix'), 1, 0, (c.c_float * 9)(*case['normal']))
+        matrix4(uniform(program,b'viewMatrix'),1,0,(c.c_float*16)(*case['view']))
+        for texture_name,label in [('sun',b'surface'),('clouds',b'cloudMap'),('moon',b'map')]:
+            integer(uniform(program,label),textures[texture_name][0])
+        integer(uniform(program,b'isOrthographic'),1)
+        vector3(uniform(program,b'lunarSun'),*case['sun'])
+        scalar(uniform(program,b'nightStrength'),.9);scalar(uniform(program,b'nightHatching'),hatch)
+        vector3(uniform(program,b'diffuse'),1,1,1);vector3(uniform(program,b'emissive'),0,0,0)
+        scalar(uniform(program,b'opacity'),1);scalar(uniform(program,b'roughness'),1);scalar(uniform(program,b'metalness'),0)
+        vector3(uniform(program,b'ambientLightColor'),.08,.08,.08)
+        view=case['view'];sun=case['sun'];light=[sum(view[i+j*4]*sun[j] for j in range(3)) for i in range(3)]
+        vector3(uniform(program,b'directionalLights[0].direction'),*light)
+        vector3(uniform(program,b'directionalLights[0].color'),3.1,3.1,3.1)
+        integer(uniform(program,b'receiveShadow'),1)
+        integer(uniform(program,b'directionalShadowMap[0]'),textures['blockedShadow' if blocked else 'clearShadow'][0])
+        shadow=[.2,0,0,0, 0,.2,0,0, 0,0,0,0, .5,.5,.5,1]
+        matrix4(uniform(program,b'directionalShadowMatrix[0]'),1,0,(c.c_float*16)(*shadow))
+        scalar(uniform(program,b'directionalLightShadows[0].shadowIntensity'),1)
+        scalar(uniform(program,b'directionalLightShadows[0].shadowBias'),0)
+        scalar(uniform(program,b'directionalLightShadows[0].shadowNormalBias'),0)
+        scalar(uniform(program,b'directionalLightShadows[0].shadowRadius'),1)
+        gl('glUniform2f',None,c.c_int,c.c_float,c.c_float)(uniform(program,b'directionalLightShadows[0].shadowMapSize'),2,2)
         vector3(uniform(program, b'sunDirection'), *case['sun'])
         vector3(uniform(program, b'cameraPosition'), *case['camera'])
         vector3(uniform(program, b'nightColor'), .01, .03, .07)
@@ -149,7 +188,7 @@ def run(data):
     sun = render('sun', case)
     assert sun[(64*128+64)*4+3] == 255, 'Sun disk is missing'
     inner = [tuple(sun[(y*128+x)*4:(y*128+x)*4+3]) for y in range(38,91) for x in range(38,91)]
-    assert len(set(inner)) > 150, 'Solar granulation has no surface detail'
+    assert len(set(inner)) > 150, 'NASA solar map has no rendered surface detail'
     assert sun[(64*128+64)*4+1] > sun[(64*128+119)*4+1], 'Solar limb darkening is missing'
     clouds = render('clouds', case)
     assert max(clouds[3::4]) > 80 and clouds[3::4].count(0) > 1000, 'Cloud coverage has no gaps or wisps'
@@ -157,15 +196,23 @@ def run(data):
     assert atmosphere[(64*128+64)*4+3] < 4 and max(atmosphere[3::4]) > 30, 'Atmosphere has no thin rim'
     dark = render('atmosphere', dict(case, sun=[0,0,-1]))
     assert atmosphere != dark, 'Atmosphere ignores the Sun direction'
+    moon=render('moon',case)
+    away=render('moon',dict(case,sun=[0,0,-1]))
+    center=(64*128+64)*4
+    assert sum(moon[center:center+3])>sum(away[center:center+3])*2, 'Moon surface night shading did not follow the Sun'
+    assert moon!=render('moon',case,1), 'Surface hatching had no effect'
+    clear_shadow=render('moonShadow',case)
+    blocked_shadow=render('moonShadow',case,blocked=True)
+    assert sum(clear_shadow[center:center+3])>sum(blocked_shadow[center:center+3])*2, 'Actual lunar material ignores terrain shadow occlusion'
     # Optional image dump for visual inspection, without extra dependencies.
     if len(sys.argv) > 1:
         from pathlib import Path
         folder=Path(sys.argv[1]); folder.mkdir(parents=True,exist_ok=True)
-        for name in ['sun','clouds','atmosphere']:
+        for name in ['sun','clouds','atmosphere','moon','moonShadow']:
             pixels=render(name,case)
             rgb=bytes(channel for row in range(127,-1,-1) for col in range(128) for channel in pixels[(row*128+col)*4:(row*128+col)*4+3])
             (folder/(name+'.ppm')).write_bytes(b'P6\n128 128\n255\n'+rgb)
-    print(json.dumps({'shader_programs_compiled': list(programs), 'ephemeris_camera_cases': len(data['cases']), 'day_night_pixel_checks': checked, 'hatching_and_glow': 'passed', 'solar_detail_clouds_atmosphere': 'passed', 'egl_version': [major.value, minor.value]}))
+    print(json.dumps({'shader_programs_compiled': list(programs), 'ephemeris_camera_cases': len(data['cases']), 'day_night_pixel_checks': checked, 'hatching_and_glow': 'passed', 'nasa_maps_surface_shading_shadow_occlusion': 'passed', 'egl_version': [major.value, minor.value]}))
     bind('eglMakeCurrent', c.c_uint, c.c_void_p, c.c_void_p, c.c_void_p, c.c_void_p)(display, None, None, None)
     bind('eglDestroyContext', c.c_uint, c.c_void_p, c.c_void_p)(display, context)
     bind('eglDestroySurface', c.c_uint, c.c_void_p, c.c_void_p)(display, surface)

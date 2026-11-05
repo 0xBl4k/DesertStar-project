@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {Vector3,PerspectiveCamera} from 'three';
 import {illuminationCosine,terminatorPoints} from '../src/lunarIlluminationMath.js';
 import {resolveLunarScene} from '../src/lunarEphemeris.js';
-import {sceneCenter,sceneCameraDistance,visibleSceneSpheres} from '../src/lunarSceneMath.js';
+import {sceneCenter,sceneCameraDistance,visibleSceneSpheres,MOON_NORTH} from '../src/lunarSceneMath.js';
 import {viewPreset,effectiveScenePreferences} from '../src/scenePreferences.js';
 
 const site={lat:-89.43890921454617,lon:-137.14356999445042};
@@ -55,6 +55,7 @@ test('framing includes cinematic glow shells and scientific guides at narrow asp
   const settings=effectiveScenePreferences(viewPreset(mode)),target=sceneCenter(geo,settings);
   const d=sceneCameraDistance(geo,view,aspect,39,1.18,target,settings);
   const camera=new PerspectiveCamera(39,aspect,.1,200);
+  camera.up.set(...(Math.abs(new Vector3(...view).normalize().dot(new Vector3(...MOON_NORTH)))>.999?[0,1,0]:MOON_NORTH));
   camera.position.copy(new Vector3(...target).addScaledVector(new Vector3(...view).normalize(),d));
   camera.lookAt(new Vector3(...target));camera.updateMatrixWorld();
   for(const {center,radius} of visibleSceneSpheres(geo,settings))for(let angle=0;angle<Math.PI*2;angle+=Math.PI/12){

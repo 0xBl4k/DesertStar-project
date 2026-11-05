@@ -2,7 +2,7 @@ export const SCENE_PREFERENCES_KEY = 'lunaris.scene-preferences.v1';
 
 const shared = {
   show3DObjects: true, showSiteMarker: true,
-  showEarthAtmosphere: true, showEarthClouds: true,
+  showEarthAtmosphere: true, showEarthClouds: true, showTerrainShadows: true,
   showSunGlow: true, showEarthGlow: true, showBloom: true, showHatching: false,
 };
 export const SCIENTIFIC_VIEW = Object.freeze({

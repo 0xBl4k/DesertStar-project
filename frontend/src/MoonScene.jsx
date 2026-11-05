@@ -4,14 +4,15 @@ import {OrbitControls,Line,Html} from '@react-three/drei';
 import {EffectComposer,Bloom,ToneMapping} from '@react-three/postprocessing';
 import {ToneMappingMode} from 'postprocessing';
 import {GLTFLoader} from 'three/examples/jsm/loaders/GLTFLoader.js';
-import {TextureLoader,Box3,Vector3,Quaternion,Matrix4,Group,Object3D,MathUtils,SRGBColorSpace,BackSide,AdditiveBlending} from 'three';
+import {TextureLoader,Box3,Vector3,Quaternion,Matrix4,Group,Object3D,MathUtils,SRGBColorSpace,BackSide,AdditiveBlending,RepeatWrapping} from 'three';
 import {COLORS} from './data.js';
+import {createLunarMaterial,updateLunarMaterial} from './lunarSurfaceMaterial.js';
 import LunarIllumination,{BodyGlow} from './LunarIllumination.jsx';
 import {SCIENTIFIC_VIEW,effectiveScenePreferences} from './scenePreferences.js';
 import {sunVertexShader,sunFragmentShader,earthShellVertex,atmosphereFragment,cloudsFragment} from './sceneShaders.js';
 import {Body} from 'astronomy-engine';
 import {celestialOrientation} from './celestialOrientation.js';
-import {markerPosition,nasaModelToScene,mapSphereToScene,sceneCenter,sceneCameraDistance,MOON_SCENE_RADIUS,SUN_RADIUS,EARTH_RADIUS} from './lunarSceneMath.js';
+import {markerPosition,nasaModelToScene,mapSphereToScene,sceneCenter,sceneCameraDistance,MOON_SCENE_RADIUS,SUN_RADIUS,EARTH_RADIUS,MOON_NORTH,ORBIT_VIEW_DIRECTION} from './lunarSceneMath.js';
 
 const rotationFor = transform => new Quaternion().setFromRotationMatrix(new Matrix4().makeBasis(
  new Vector3(...transform([1,0,0])),new Vector3(...transform([0,1,0])),new Vector3(...transform([0,0,1]))));
@@ -24,8 +25,17 @@ class AssetBoundary extends Component{
  render(){return this.state.failed?this.props.fallback:this.props.children}
 }
 
-function NASA({url,onLoaded}){
+function useMoonMaterial(geometry,settings) {
+ const map=useLoader(TextureLoader,'/assets/lunar-reference.jpg');
+ useMemo(()=>{map.colorSpace=SRGBColorSpace;map.anisotropy=8;map.wrapS=RepeatWrapping;map.needsUpdate=true},[map]);
+ const material=useMemo(()=>createLunarMaterial(map),[map]);
+ updateLunarMaterial(material,geometry,settings);
+ useEffect(()=>()=>material.dispose(),[material]);
+ return material;
+}
+function NASA({url,onLoaded,geometry,settings}){
  const gltf=useLoader(GLTFLoader,url);
+ const material=useMoonMaterial(geometry,settings);
  const obj=useMemo(()=>{
   const o=gltf.scene.clone(true);
   o.updateMatrixWorld(true);
@@ -34,7 +44,7 @@ function NASA({url,onLoaded}){
   let radius=0;
   o.traverse(mesh=>{
    if(!mesh.isMesh)return;
-   mesh.castShadow=false;mesh.receiveShadow=false;
+   mesh.material=material;
    const positions=mesh.geometry.attributes.position;
    for(let i=0;i<positions.count;i++){
     point.fromBufferAttribute(positions,i).applyMatrix4(mesh.matrixWorld);
@@ -47,17 +57,24 @@ function NASA({url,onLoaded}){
   normalized.scale.setScalar(MOON_SCENE_RADIUS/(radius||1));
   normalized.quaternion.copy(NASA_ROTATION);
   return normalized;
- },[gltf]);
+ },[gltf,material]);
+ useEffect(()=>{obj.traverse(mesh=>{if(mesh.isMesh){mesh.castShadow=settings.showTerrainShadows;mesh.receiveShadow=settings.showTerrainShadows}})},[obj,settings.showTerrainShadows]);
  useEffect(()=>{onLoaded?.()},[url,onLoaded]);
  return <primitive object={obj}/>;
 }
 
-function ReferenceMoon(){
- const texture=useLoader(TextureLoader,'/assets/lunar-reference.jpg');
- useMemo(()=>{texture.colorSpace=SRGBColorSpace;texture.anisotropy=4;texture.needsUpdate=true},[texture]);
- return <group quaternion={MAP_ROTATION}><mesh>
-  <sphereGeometry args={[MOON_SCENE_RADIUS,96,64]}/>
-  <meshStandardMaterial map={texture} roughness={1} metalness={0}/>
+function ReferenceMoon({geometry,settings}){
+ const material=useMoonMaterial(geometry,settings);
+ const height=useLoader(TextureLoader,'/assets/moon-lola-height.png');
+ useMemo(()=>{height.wrapS=RepeatWrapping;height.needsUpdate=true},[height]);
+ useMemo(()=>{
+  material.displacementMap=height;
+  material.displacementScale=(10.504000663757324+8.878499984741211)/1737.4*MOON_SCENE_RADIUS;
+  material.displacementBias=-8.878499984741211/1737.4*MOON_SCENE_RADIUS;
+  material.bumpMap=height;material.bumpScale=.012;material.needsUpdate=true;
+ },[height,material]);
+ return <group quaternion={MAP_ROTATION}><mesh material={material} castShadow={settings.showTerrainShadows} receiveShadow={settings.showTerrainShadows}>
+  <sphereGeometry args={[MOON_SCENE_RADIUS,256,128]}/>
  </mesh></group>;
 }
 function LoadingMoon(){
@@ -138,8 +155,10 @@ function MoonSurfacePick({onSelect}){
 }
 
 function SunBody({position,glow,timestamp}){
+ const texture=useLoader(TextureLoader,'/assets/sun-nasa-euv.jpg');
+ useMemo(()=>{texture.colorSpace=SRGBColorSpace;texture.wrapS=RepeatWrapping;texture.needsUpdate=true},[texture]);
  const orientation=useMemo(()=>celestialOrientation(Body.Sun,timestamp),[timestamp]);
- const uniforms=useMemo(()=>({radiance:{value:glow?2.6:1.3}}),[glow]);
+ const uniforms=useMemo(()=>({surface:{value:texture},radiance:{value:glow?2.6:1.3}}),[texture,glow]);
  return <group position={position}>
   <mesh quaternion={orientation}><sphereGeometry args={[SUN_RADIUS,64,40]}/>
    <shaderMaterial vertexShader={sunVertexShader} fragmentShader={sunFragmentShader} uniforms={uniforms} toneMapped={!glow}/></mesh>
@@ -148,10 +167,10 @@ function SunBody({position,glow,timestamp}){
  </group>;
 }
 function EarthBody({position,settings,timestamp,sunDirection}){
- const texture=useLoader(TextureLoader,'/assets/earth-day.jpg');
+ const [texture,cloudMap]=useLoader(TextureLoader,['/assets/earth-day.jpg','/assets/earth-clouds.jpg']);
  useMemo(()=>{texture.colorSpace=SRGBColorSpace;texture.anisotropy=4;texture.needsUpdate=true},[texture]);
  const orientation=useMemo(()=>celestialOrientation(Body.Earth,timestamp),[timestamp]);
- const uniforms=useMemo(()=>({sunDirection:{value:new Vector3(...sunDirection)}}),[sunDirection]);
+ const uniforms=useMemo(()=>({sunDirection:{value:new Vector3(...sunDirection)},cloudMap:{value:cloudMap}}),[sunDirection,cloudMap]);
  const cloudDrift=Number.isFinite(timestamp)?((timestamp-Date.UTC(2026,10,1))/86400000*.035)%(Math.PI*2):0;
  return <group position={position}>
   <group quaternion={orientation}>
@@ -173,26 +192,30 @@ function EarthBody({position,settings,timestamp,sunDirection}){
 function PlainEarth({position}){
  return <mesh position={position}><sphereGeometry args={[EARTH_RADIUS,40,28]}/><meshStandardMaterial color="#267cc6"/></mesh>;
 }
-function SunLight({geometry}){
+function SunLight({geometry,settings}){
  const target=useMemo(()=>new Object3D(),[]);
  return <>
-  <primitive object={target} position={geometry.marker}/>
-  <directionalLight color="#fff0db" intensity={3.1} position={geometry.sunPosition} target={target}/>
+  <primitive object={target} position={geometry.origin}/>
+  <directionalLight color="#fff0db" intensity={3.1} position={geometry.sunPosition} target={target} castShadow={settings.showTerrainShadows}
+   shadow-mapSize={[2048,2048]} shadow-camera-left={-2.15} shadow-camera-right={2.15}
+   shadow-camera-top={2.15} shadow-camera-bottom={-2.15} shadow-camera-near={.1} shadow-camera-far={12}
+   shadow-bias={-.000025} shadow-normalBias={.0008} shadow-radius={1.5}/>
+
  </>;
 }
 function SceneDirections({geometry,settings,timestamp}){
- const {marker,frame,sunPosition,earthPosition}=geometry;
+ const {origin,frame,sunPosition,earthPosition,axisLength}=geometry;
  return <>
-  {settings.showDirectionLines&&<><Line points={[marker,sunPosition]} color="#ffd05a" lineWidth={1.6} transparent opacity={.8}/>
-  <Line points={[marker,earthPosition]} color="#43bfff" lineWidth={1.6} transparent opacity={.8}/></>}
-  {settings.show3DObjects&&<><SunBody position={sunPosition} glow={settings.showSunGlow} timestamp={timestamp}/>
+  {settings.showDirectionLines&&<><Line points={[origin,sunPosition]} color="#ffd05a" lineWidth={1.6} transparent opacity={.8}/>
+  <Line points={[origin,earthPosition]} color="#43bfff" lineWidth={1.6} transparent opacity={.8}/></>}
+  {settings.show3DObjects&&<><AssetBoundary fallback={null}><Suspense fallback={null}><SunBody position={sunPosition} glow={settings.showSunGlow} timestamp={timestamp}/></Suspense></AssetBoundary>
    <AssetBoundary fallback={<PlainEarth position={earthPosition}/>}>
     <Suspense fallback={<PlainEarth position={earthPosition}/>}><EarthBody position={earthPosition} settings={settings} timestamp={timestamp} sunDirection={geometry.sunDirection}/></Suspense>
    </AssetBoundary></>}
-  {settings.showAxes&&[['east','X / E','#ff6868'],['north','Y / N','#5ed7ff'],['up','Z / Up','#76ee9a']].map(([key,label,color])=>
+  {settings.showAxes&&[['prime','X / 0°','#ff6868'],['east','Y / 90°E','#5ed7ff'],['north','Z / N','#76ee9a']].map(([key,label,color])=>
    <group key={key}>
-    <arrowHelper args={[new Vector3(...frame[key]),new Vector3(...marker),.72,color,.11,.055]}/>
-    <Html position={marker.map((v,i)=>v+frame[key][i]*.86)} center occlude zIndexRange={[3,0]} className="scene-axis-label"><span style={{color}}>{label}</span></Html>
+    <arrowHelper args={[new Vector3(...frame[key]),new Vector3(...origin),axisLength,color,.13,.065]}/>
+    <Html position={frame[key].map(v=>v*(axisLength+.16))} center occlude zIndexRange={[3,0]} className="scene-axis-label"><span style={{color}}>{label}</span></Html>
    </group>)}
  </>;
 }
@@ -230,19 +253,20 @@ export default function MoonScene({modelUrl,onModelLoaded,onModelError,sites,act
  const [zoom,setZoom]=React.useState(false);
  const geo=clockScene?geometry:null;
  const settings=useMemo(()=>effectiveScenePreferences(visualSettings),[visualSettings]);
+ const surfaceProps={geometry:geo,settings};
  useEffect(()=>()=>{document.body.style.cursor='auto'},[]);
  return <div className="moon-3d-wrap" onDoubleClick={()=>zoomable&&setZoom(v=>!v)} title={zoomable?'Drag to rotate · Double-click to fit view':'Drag to rotate'}>
   <AssetBoundary fallback={<div className="scene-unavailable" role="status"><strong>3D view unavailable</strong><p>This browser could not start WebGL. Try enabling hardware acceleration or opening LUNARIS in a browser with WebGL support.</p></div>}>
-  <Canvas camera={{position:[0,0,7.85],fov:39,near:.1,far:100}} dpr={[1,1.8]} gl={{alpha:true,antialias:true,powerPreference:'high-performance'}}>
+  <Canvas shadows={settings.showTerrainShadows} camera={{position:clockScene?ORBIT_VIEW_DIRECTION:[0,0,7.85],up:clockScene?MOON_NORTH:[0,1,0],fov:39,near:.1,far:100}} dpr={[1,1.8]} gl={{alpha:true,antialias:true,powerPreference:'high-performance'}}>
    <ambientLight intensity={geo?(settings.highContrastShadow?.055:.18):.55}/>
    <hemisphereLight intensity={geo?(settings.highContrastShadow?.02:.07):.21} color="#c7ddff" groundColor="#182c4a"/>
-   {geo?<SunLight geometry={geo}/>:<>
+   {geo?<SunLight geometry={geo} settings={settings}/>:<>
     <directionalLight intensity={2.3} color="#ffe9c6" position={[-3.5,2.5,5.5]}/>
     <directionalLight intensity={.28} color="#3484d3" position={[5,-2,-3]}/>
    </>}
    <Suspense fallback={<LoadingMoon/>}>
-    <AssetBoundary key={modelUrl||'reference'} onError={onModelError} fallback={<ReferenceMoon/>}>
-     {modelUrl?<NASA url={modelUrl} onLoaded={onModelLoaded}/>:<ReferenceMoon/>}
+    <AssetBoundary key={modelUrl||'reference'} onError={onModelError} fallback={<ReferenceMoon {...surfaceProps}/>}>
+     {modelUrl?<NASA url={modelUrl} onLoaded={onModelLoaded} {...surfaceProps}/>:<ReferenceMoon {...surfaceProps}/>}
     </AssetBoundary>
    </Suspense>
    <MoonSurfacePick onSelect={onSurfaceSelect}/>
@@ -250,7 +274,7 @@ export default function MoonScene({modelUrl,onModelLoaded,onModelError,sites,act
     color={s.isMapPick?'#ff526c':compareIds.includes(s.id)?COLORS[compareIds.indexOf(s.id)%COLORS.length]:selectedColor} onSelect={onSelect}/>)}
    {geo&&<><LunarIllumination geometry={geo} settings={settings}/><SceneDirections geometry={geo} settings={settings} timestamp={timestamp}/></>}
    <OrbitControls makeDefault enableZoom={false} enablePan={false} enableDamping dampingFactor={.075} rotateSpeed={.52} minPolarAngle={.08} maxPolarAngle={Math.PI-.08}/>
-   <CameraFocus enabled={focusOnSite} site={selected}/>
+   <CameraFocus enabled={!clockScene&&focusOnSite} site={selected}/>
    <ZoomRig enlarged={zoom} geometry={geo} viewMode={viewMode} settings={settings}/>
    <MarkerTracker sites={sites} activeId={activeId} onPositions={onPositions} onAnchor={onAnchor}/>
    {geo&&settings.showBloom&&<CinematicEffects/>}

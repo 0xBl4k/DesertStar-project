@@ -1,121 +1,142 @@
-# LUNARIS 3D visualization
+# LUNARIS Moon-centered visualization
 
-All three planned phases are implemented in Mission Details and Compare.
-Run `npm ci` and `npm run dev` from `frontend/` within the complete repository.
-The committed `frontend/dist/` is rebuilt from the same source.
+The global scene is centered on the Moon. Sun/Earth placement, light direction,
+the day/night boundary, axes and the camera orbit do not depend on a landing site.
+Choosing a site changes its marker and visibility analysis only. The Moon stays
+at the orbit pivot; bodies retain their three-dimensional NASA/SPICE directions.
+Their displayed sizes and distances remain schematic.
 
-## Visual options
+## Backend connection
 
-Open **Visual options** under the mission-time controls. Preferences persist
-in local storage across navigation and reloads; browsers that block storage
-still have working session controls.
+Run the backend from the repository root with the existing Python environment:
 
-- **Scientific:** clear day/night boundary, night highlighting, high contrast,
-  site markers, local axes and direction lines. Decorative effects are off.
-- **Cinematic:** Sun glow, Earth rim glow and HDR bloom; guides are hidden.
-- Changing an individual option makes the view **Custom**. Reset restores
-  the scientific preset. Master glow can be disabled without changing the
-  boundary, night mask or scientific readouts.
+```bash
+uvicorn api.main:app --reload
+```
 
-Individual controls cover Sun/Earth bodies, site markers, direction lines,
-local X/East Y/North Z/Up axes, the day/night boundary, night highlighting,
-strong contrast, optional night hatching, Sun glow, Earth glow and soft bloom. Earth also has independent blue-atmosphere
-and cloud-layer controls, enabled by default in both presets. These do not require
-decorative glow. Saved preferences from the earlier version retain their choices
-and receive the new Earth-sky defaults.
-Hatching requires night highlighting. Glow options require visible bodies and
-the master glow switch. A hidden body does not remove the physical sunlight
-direction. Hide bodies and direction lines for a closer view of the Moon;
-camera fitting follows the currently visible objects and guides.
+In a second terminal:
 
-## Full lunar-cycle playback
+```bash
+cd frontend
+npm ci
+npm run dev
+```
 
-Mission Details and Compare share a 709-hour timeline (~29.5 days), replacing
-72 hours throughout the slider, backend request, comparison totals and progress
-bars. One mean synodic cycle is 29.53059 days; the interval rounds upward to an
-hour so hourly backend sampling covers the complete cycle and includes an exact
-last sample. This is a fixed mean phase cycle, not a calculated new-Moon-to-new-Moon
-event interval. The distinction from the ~27.3-day sidereal orbit is explained by
-[NASA's Moon phases guide](https://science.nasa.gov/moon/moon-phases/).
+Restart both processes after pulling this update. The frontend uses two endpoints:
 
-The scrubber has weekly ticks, half-hour steps, replay from the end, and 1×/2×/4×
-speeds. At 1×, the full interval takes about 90 seconds while the tab is active.
-The start calendar ends on 2027-10-02; on that date the last start time is 11:00
-UTC so the complete scenario fits the stored ephemeris ending 2027-11-01.
-Selecting the last date clamps a later time; its time picker explains the limit.
-A partial backend response is rejected instead of holding the last 72-hour
-position through the remainder of the month. Offline scene geometry continues
-to use the same full-year stored ephemeris.
+| Endpoint | Inputs | Purpose |
+| --- | --- | --- |
+| `POST /api/ephemeris` | UTC start/end, step_minutes | Site-independent Moon-centered Sun/Earth vectors in kilometers |
+| `POST /api/visibility` | Same window plus preset or custom site | Local azimuth/elevation, terrain windows for supported presets, or geometric analysis |
 
-## Earth motion and sky
+Both endpoints use the same validated time range and interpolation of the bundled
+NASA/JPL NAIF SPICE samples. The global response declares origin `MOON`, frame
+`MOON_ME_DE440_ME421`, units `km`, UTC timestamps and samples with `t`, `sun_km`
+and `earth_km`. The frontend rejects incompatible frames, zero/nonfinite vectors,
+missing samples or mismatched time ranges. No site azimuth/elevation is used to
+place the global bodies. Global requests are cached by UTC window, independently
+of the selected site; playback reads the local response without per-frame requests.
 
-Earth's center retains its topocentric SPICE-derived direction. In a Moon-fixed
-scene it mainly librates near one direction, rather than making a large orbit
-around the Moon. Its surface now rotates from absolute UTC. The Greenwich
-meridian comes from apparent sidereal time and the equator-of-date-to-J2000
-rotation; the scene orientation uses the IAU lunar body frame. The IAU attitude
-model is for visual appearance and is separate from the authoritative DE440
-position samples. Sun surface rotation uses the IAU model as well.
+Vite forwards `/api`, `/health` and `/ready` to `http://127.0.0.1:8000` by default.
+Set `VITE_DEV_API_TARGET` for a different development backend. Production builds
+use `VITE_API_URL` when the backend is hosted at another origin; configure the
+backend's `CORS_ORIGINS` accordingly.
 
-Scrubbing, changing dates, pausing, and resuming give the same orientation at
-the same UTC instant. A thin blue atmosphere responds to the Sun direction;
-a separate translucent cloud shell rotates with Earth plus slow illustrative
-drift. The NASA Blue Marble surface remains unchanged. Clouds and solar
-surface features are procedural illustrations, not date-specific weather or
-solar observations. The Sun now has seamless cellular granulation, sunspots,
-and limb darkening instead of the former low-resolution striped texture.
+When the scene endpoint is unavailable, the exact same bundled NASA/SPICE vector
+file drives the centered visualization, with its local-data source shown in the
+legend. Visibility readouts remain unavailable if their backend request fails.
+The client never invents terrain visibility to fill a missing response.
 
-## Day and night
+## Horizontal view and geographic frame
 
-The spherical lighting test is the dot product of the Moon-fixed scene surface
-direction and the Sun direction. Positive values face the Sun. Negative values
-form the night hemisphere. The terminator is the great circle perpendicular to
-that same Sun direction. All three are fixed to lunar coordinates rather than
-the camera. The selected UTC date, time and playback determine the Sun vector.
+The registered internal scene frame is unchanged: Moon-fixed `(X,Y,Z)` maps to
+scene `(Y,X,-Z)`. Geographic picking and marker placement still round-trip.
+The orbital view now uses lunar north `(0,0,-1)` as camera up, with an oblique,
+near-equatorial initial angle. This spreads the orbital plane horizontally
+without flattening the true Z coordinates. Surface-browsing Home/Search views
+retain their polar browsing orientation. Selecting another site does not refocus
+or rotate the orbital camera. Camera fitting includes currently visible bodies,
+atmosphere/glow shells, centered axes and rays, while preserving the Moon pivot.
 
-The night mask is a translucent, optional global overlay; high contrast also
-reduces ambient fill light. Hatching is locked to the lunar scene surface.
-The boundary and mask are depth tested, so they do not draw through the Moon.
-The legend shows enabled layers and the current UTC instant.
+Earth's center mainly librates in this Moon-fixed frame; it does not make an
+invented large orbit around the Moon. Its surface attitude follows absolute UTC
+using Greenwich apparent sidereal time and an IAU lunar attitude model. The
+appearance model is separate from the authoritative DE440 position vectors.
+Pausing, reversing the scrubber, or changing the start time does not accumulate
+rotation drift.
 
-This is global day/night separation, not a per-crater terrain-shadow simulation.
-Terrain-aware visibility remains available through supported backend presets.
-The Sun direction reconstructed from a site's API azimuth/elevation is used as
-parallel global lighting, appropriate to this schematic visualization; it is
-not an operationally validated lighting product.
+## Moon lighting and terrain shadows
 
-## Optional effects
+Parallel sunlight points from the Sun toward the Moon origin. The displayed
+Sun position and light use the same centered direction. Optional 2048-pixel
+soft shadow maps let the NASA LRO mesh cast and receive relief shadows.
+These shadows show the resolution of the rendered model; they are not a
+validated per-crater planning product.
 
-The Sun and Earth remain sphere meshes. Optional three-dimensional rim shells
-and an HDR bloom pass provide the cinematic treatment. Bloom is mounted only
-when glow is enabled for a visible body. Scientific mode renders without that
-pass. The effects change presentation only; API results, local ephemeris,
-directions, visibility windows and summary metrics are not modified.
-Bloom uses an HDR-capable WebGL context and ACES output tone mapping. On devices
-without HDR render targets, the simpler rim-glow effects remain available.
+The updated NASA LROC cylindrical map is projected by lunar longitude/latitude
+onto the existing NASA mesh, independent of its cube-atlas UV layout. The source
+geometry is preserved. If that mesh is unavailable, a sphere uses the same color
+map plus displacement/bump detail derived from NASA's LOLA elevation map.
 
-The project pins `@react-three/postprocessing` 2.19.1 for its React 18/Fiber 8
-compatibility, with `postprocessing` 6.36.7 for Three.js 0.170. No new backend
-dependency is needed.
+Night highlighting and optional hatching are applied inside the actual lunar
+surface material. They retain dim texture detail on the night side and have a
+narrow smooth day/night transition. The former floating spherical mask is no
+longer drawn. The optional boundary line is a spherical reference great circle
+perpendicular to the global Sun vector; detailed terrain shadows may differ
+from that reference. Camera movement and site selection cannot move the boundary.
 
-## Validation
+## NASA imagery and provenance
 
-- `npm run test:api`: frontend API, ephemeris, coordinate registration,
-  picking, camera fitting, terminator, day/night classification and preference
-  persistence/gating tests, full-cycle coverage and endpoint tests, and Earth attitude checks against an independent Greenwich observer.
-- `npm run test:shaders`: optional Python 3 + Linux Mesa EGL check. Compiles the
-  actual app Sun, cloud, atmosphere, night-mask and glow shaders, and renders an offscreen sphere.
-  Tests eight real ephemeris/date/camera cases against Three.js reference rays
-  (868 day/night pixel checks), plus hatching, rim glow, solar surface variation, limb darkening, cloud coverage and Sun-responsive atmospheric output. Three.js
-  shader chunks are expanded for a linear offscreen render target.
-- `npm run build`: production compilation and asset refresh.
-- `python -m pytest tests/ -q`: existing backend regression suite.
+All visible celestial surface maps are NASA-derived:
 
-The cloud preview browser used for this change has WebGL disabled. Browser
-controls and persistence can be checked there, while its 3D canvas displays a
-clear fallback. Native shader/pixel checks passed; a complete browser GPU
-rendering check remains a local verification step.
+- Moon: updated 2025 LROC color map from the [CGI Moon Kit](https://svs.gsfc.nasa.gov/4720/),
+  and the existing [NASA LRO topographic mesh](https://svs.gsfc.nasa.gov/14959/).
+- Fallback terrain: LOLA `ldem_4.tif`, converted to display displacement. The
+  compact 8-bit map has about 76 m vertical quantization and 4 pixels/degree;
+  it does not substitute for the backend's local horizon profiles.
+- Earth: [NASA Blue Marble](https://svs.gsfc.nasa.gov/2915/) surface mosaic and
+  [Blue Marble cloud composite](https://science.nasa.gov/earth/earth-observatory/the-blue-marble-true-color-global-imagery-at-1km-resolution/).
+  The original NASA EO cloud server returned HTTP 503; its archival NASA image
+  was retrieved from Penn State's educational mirror, recorded in the manifest.
+- Sun: [NASA JPL SDO/STEREO 304-angstrom full-surface map](https://svs.gsfc.nasa.gov/30362/).
+  This is historical 2012 false-color EUV imagery, replacing the procedural Sun.
 
-See [Phase 1 details](phase1-3d.md) for the registered NASA Moon frame and
-offline ephemeris pipeline. Image credits are in
-`frontend/public/assets/CREDITS.md`.
+Maps are historical visual textures, not observations at the selected 2026/2027
+instant. Cloud drift, atmospheric scattering and glow are rendering effects.
+`frontend/public/assets/CREDITS.md` and `nasa-sources.json` record credits,
+source URLs, original/download checksums, the cloud mirror and all conversions.
+No third-party texture packs or generated surface imagery are used by the scene.
+The assets are committed for offline use; NASA servers are not contacted per frame.
+
+## Playback and preferences
+
+Mission Details and Compare share a 709-hour (~29.5-day) mean phase-cycle window,
+with 710 hourly backend samples and half-hour scrubber steps. Weekly ticks,
+replay from the end, and 1×/2×/4× speeds are available. One active 1× playback
+lasts about 90 seconds. The final start is 2027-10-02 11:00 UTC, so the full
+window fits the ephemeris ending 2027-11-01. The calendar/time picker applies
+that limit. This mean window is not an event-to-event new-Moon prediction.
+
+Scientific/Cinematic presets and individual controls persist across navigation
+and reloads. Terrain relief shadows, day/night highlighting, boundary, hatching,
+Moon-centered axes, direction rays, markers, body visibility, Earth atmosphere,
+clouds and decorative glow/bloom can be controlled independently. Bloom requires
+supported HDR render targets; the simpler appearance remains available otherwise.
+
+## Verification
+
+- `npm run test:api`: frontend geometry, endpoint adaptation, independent site
+  selection, frame validation, horizontal camera fitting, playback and preferences.
+- `python -m pytest tests/ -q`: backend regression and new endpoint tests comparing
+  global vectors with the same site's local visibility, fractional UTC and coverage.
+- `npm run test:shaders`: optional Python 3, Pillow and Mesa EGL/OpenGL ES 3 check.
+  Compiles the actual patched Three.js lunar material with and without soft
+  shadows, plus Sun/cloud/atmosphere/glow and the shared night field. Renders the
+  bundled NASA textures and checks illumination, hatching and known shadow-map
+  occlusion. Also performs 868 day/night pixel checks over eight date/camera cases.
+- `npm run build`: production compilation and committed asset refresh.
+
+The cloud browser cannot start WebGL. The live frontend's connection to both
+backend endpoints and playback through the final frame were checked there.
+Complete browser rendering of the assembled 3D scene still needs a local browser
+with WebGL; native material/shader/pixel checks pass independently.

@@ -1,0 +1,51 @@
+[
+  {
+    "file": "lunar-reference.jpg",
+    "label": "Moon color (2025)",
+    "source_page": "https://svs.gsfc.nasa.gov/4720/",
+    "source_url": "https://svs.gsfc.nasa.gov/vis/a000000/a004700/a004720/lroc_color_2k.jpg",
+    "credit": "NASA/SVS; Ernie Wright; LRO/LROC; polar fill from LOLA",
+    "processing": "Original 2048x1024 JPEG, unchanged.",
+    "sha256": "f7130a1822681fa7512d7dcfd40db8c10b9ba4f06777910348698260ed7a2170",
+    "source_sha256": "f7130a1822681fa7512d7dcfd40db8c10b9ba4f06777910348698260ed7a2170"
+  },
+  {
+    "file": "moon-lola-height.png",
+    "label": "Moon elevation",
+    "source_page": "https://svs.gsfc.nasa.gov/4720/",
+    "source_url": "https://svs.gsfc.nasa.gov/vis/a000000/a004700/a004720/ldem_4.tif",
+    "credit": "NASA/SVS; LRO/LOLA",
+    "processing": "1440x720 float-km DEM converted to 8-bit display displacement; -8.878499984741211 to 10.504000663757324 km relative to 1737.4 km. Fallback geometry only; quantization about 76 m.",
+    "sha256": "4c3dc879cb598fb8ee7cca5be5af1e5456e265b38bcc16b8e72765b5ce560c60",
+    "source_sha256": "330afa2556a86fd05ac6ba2f912f246600fdade35de2a0d90593d50d07b01b65"
+  },
+  {
+    "file": "sun-nasa-euv.jpg",
+    "label": "Sun 304 angstrom EUV, 2012",
+    "source_page": "https://svs.gsfc.nasa.gov/30362/",
+    "source_url": "https://svs.gsfc.nasa.gov/vis/a030000/a030300/a030362/euvi_aia304_2012_carrington.tif",
+    "credit": "NASA JPL; SDO/AIA and STEREO/EUVI",
+    "processing": "Full 360-degree Carrington map, resized from 4104x2304 to 2048x1024 JPEG. Historical false-color EUV illustration, not observations at the selected 2026/2027 date.",
+    "sha256": "35385d2f732d2a9632de6f4965dda64dc5de9921828cd77fbf28979d3211c3f6",
+    "source_sha256": "6235977f0fee5594786d8cde7bd4b0bb46db1f7755cf30cf625d0f1dc3e72ba5"
+  },
+  {
+    "file": "earth-clouds.jpg",
+    "label": "Earth Blue Marble cloud composite, 2002",
+    "source_page": "https://science.nasa.gov/earth/earth-observatory/the-blue-marble-true-color-global-imagery-at-1km-resolution/",
+    "source_url": "https://eoimages.gsfc.nasa.gov/images/imagerecords/57000/57747/cloud_combined_2048.jpg",
+    "credit": "NASA GSFC; Reto Stockli; Robert Simmon; MODIS",
+    "processing": "2048x1024 source converted to grayscale JPEG for alpha. Historical composite, not current weather; illustrative slow cloud drift.",
+    "sha256": "3f4ccce2ea24aa36eab844319fd49f0aff08db08d86abdb23ecc986c3135249e",
+    "source_sha256": "6480a5c2a404ddd95a9a34c1a3694d6cbdb30ebf1385a71bdf5b39a2798360e4",
+    "download_mirror": "https://phys23p.sl.psu.edu/phys_anim/astro/parallax/cloud_combined_2048.jpg"
+  },
+  {
+    "file": "earth-day.jpg",
+    "source_page": "https://svs.gsfc.nasa.gov/2915/",
+    "source_url": "https://svs.gsfc.nasa.gov/vis/a000000/a002900/a002915/bluemarble-2048.png",
+    "credit": "NASA GSFC/SVS; Reto Stockli; NASA Earth Observatory",
+    "processing": "2048x1024 PNG converted to JPEG. Historical surface mosaic.",
+    "sha256": "ba4aabca5e27f29cffdc8a732cac1f7e3e83867388a1002dd501cb0ad342b10a"
+  }
+]

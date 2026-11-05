@@ -2,6 +2,7 @@
  * API results (not Astronomy Engine guesses) are authoritative for displayed analysis.
  * Presets use terrain-aware science; arbitrary coordinates are geometry-only.
  */
+import {MOON_FIXED_FRAME} from './lunarSceneMath.js';
 import {EPHEMERIS_BEGIN, EPHEMERIS_END, HOURS_PER_SCENARIO, HOUR_MS, scenarioTimestamp} from './timeline.js';
 export {EPHEMERIS_BEGIN, EPHEMERIS_END, HOURS_PER_SCENARIO} from './timeline.js';
 const base = (import.meta.env?.VITE_API_URL || '').replace(/\/$/, '');
@@ -34,18 +35,22 @@ export async function loadHealth() {
   return response.json();
 }
 
-function buildRequest(site, date, time) {
-  if (!site) throw new Error('Choose a landing site.');
+function buildWindow(date, time) {
   const stamp = scenarioTimestamp(date, time);
   if (stamp === null) throw new Error('Enter a valid UTC date and time.');
   if (stamp < EPHEMERIS_BEGIN || stamp + HOURS_PER_SCENARIO * HOUR_MS > EPHEMERIS_END) {
     throw new Error('A full lunar cycle (709-hour analysis) must fit between 2026-11-01 and 2027-11-01 UTC.');
   }
-  const payload = {
+  return {
     start_utc: new Date(stamp).toISOString(),
     end_utc: new Date(stamp + HOURS_PER_SCENARIO * HOUR_MS).toISOString(),
     step_minutes: 60,
   };
+ }
+
+function buildRequest(site,date,time) {
+  if(!site)throw new Error('Choose a landing site.');
+  const payload=buildWindow(date,time);
   if (site.backendSiteId) {
     return {...payload, mode: 'preset', site_id: site.backendSiteId};
   }
@@ -88,6 +93,30 @@ export function getScenario(site, date, time) {
   pending.catch(() => { if (cache.get(key) === pending) cache.delete(key); });
   // Bound memory growth over many date/location combinations.
   if (cache.size > 48) cache.delete(cache.keys().next().value);
+  return pending;
+}
+
+/** Global celestial requests contain no selected-site coordinates. */
+export function getCelestialScenario(date,time) {
+  const key=`moon-center|${date}|${time}`;
+  if(cache.has(key))return cache.get(key);
+  const pending=(async()=>{
+    const payload=buildWindow(date,time);
+    const response=await fetch(`${base}/api/ephemeris`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    const json=await response.json().catch(()=>({}));
+    if(!response.ok)throw new Error(detailOf(json,`Ephemeris HTTP ${response.status}`));
+    if(json.origin!=='MOON'||json.frame!==MOON_FIXED_FRAME||json.units!=='km'||
+       Date.parse(json.start_utc)!==Date.parse(payload.start_utc)||json.step_minutes!==60||
+       !Array.isArray(json.samples)||json.samples.length!==HOURS_PER_SCENARIO+1||
+       json.samples.some((sample,i)=>sample.t!==i*60||['sun_km','earth_km'].some(key=>
+         !Array.isArray(sample[key])||sample[key].length!==3||!sample[key].every(Number.isFinite)||Math.hypot(...sample[key])===0))) {
+      throw new Error('Backend returned incomplete or incompatible Moon-centered vectors.');
+    }
+    return json;
+  })();
+  cache.set(key,pending);
+  pending.catch(()=>{if(cache.get(key)===pending)cache.delete(key)});
+  if(cache.size>48)cache.delete(cache.keys().next().value);
   return pending;
 }
 

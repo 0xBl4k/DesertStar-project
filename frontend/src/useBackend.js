@@ -1,5 +1,5 @@
 import {useEffect, useMemo, useState} from 'react';
-import {getScenario, metricAt, emptyMetric, scenarioKey} from './api.js';
+import {getScenario, getCelestialScenario, metricAt, emptyMetric, scenarioKey} from './api.js';
 
 /** One request for the whole lunar phase cycle. Playback only reads local samples. */
 export function useScenario(site, date, time, elapsed = 0) {
@@ -44,4 +44,20 @@ export function useComparisons(scenarios) {
     errors: current.errors,
     loading: scenarios.length > 0 && current.data.length !== scenarios.length,
   };
+}
+
+
+/** Geometry follows UTC only. Choosing a site cannot issue a different scene request. */
+export function useCelestialScenario(date,time,enabled=true) {
+  const key=enabled?`${date}|${time}`:'';
+  const [state,setState]=useState({key:null,result:null,error:null});
+  useEffect(()=>{
+    let active=true;
+    if(!enabled)return()=>{active=false};
+    setState({key,result:null,error:null});
+    getCelestialScenario(date,time).then(result=>{if(active)setState({key,result,error:null})})
+      .catch(error=>{if(active)setState({key,result:null,error:error.message})});
+    return()=>{active=false};
+  },[key,enabled]);
+  return state.key===key?state:{result:null,error:null};
 }

@@ -4,7 +4,7 @@ from functools import lru_cache
 import numpy as np
 from fastapi import HTTPException
 
-from api.schemas import VisibilityRequest
+from api.schemas import VisibilityRequest, EphemerisRequest
 from api.services.data_store import load_ephemeris, load_horizon, UnknownSiteError, DataStoreError
 from core.windows import directions, margin, crossings
 
@@ -78,18 +78,9 @@ def build_summary(start, end, sun_windows, earth_windows, sun_el):
     }
 
 
-def calculate_visibility(request: VisibilityRequest) -> dict:
+def sampled_vectors(request: EphemerisRequest):
+    """One interpolation path for centered 3D positions and site visibility."""
     eph = load_ephemeris()
-
-    if request.mode == "preset":
-        try:
-            site = load_horizon(request.site_id)
-        except UnknownSiteError as exc:
-            raise HTTPException(status_code=404, detail="Unknown site ID") from exc
-        lat, lon = site["lat"], site["lon"]
-    else:
-        lat, lon = request.lat, request.lon
-
     start = datetime.fromisoformat(eph["start_utc"].replace("Z", "+00:00"))
     if start.tzinfo is None:
         start = start.replace(tzinfo=timezone.utc)
@@ -111,6 +102,41 @@ def calculate_visibility(request: VisibilityRequest) -> dict:
     fraction = (indices - left)[:, None]
     sun = sun_vectors[left] * (1 - fraction) + sun_vectors[right] * fraction
     earth = earth_vectors[left] * (1 - fraction) + earth_vectors[right] * fraction
+
+    return eph, start, sun_vectors, earth_vectors, sun, earth
+
+
+def calculate_ephemeris(request: EphemerisRequest) -> dict:
+    eph, _, _, _, sun, earth = sampled_vectors(request)
+    if eph.get("frame") != "MOON_ME_DE440_ME421":
+        raise DataStoreError("Unsupported Moon-centered ephemeris frame")
+    return {
+        "origin": "MOON",
+        "frame": eph.get("frame"),
+        "units": "km",
+        "source": "NASA/JPL NAIF SPICE (bundled ephemeris)",
+        "start_utc": request.start_utc.isoformat(),
+        "end_utc": request.end_utc.isoformat(),
+        "step_minutes": request.step_minutes,
+        "samples": [{"t": i * request.step_minutes,
+                     "sun_km": sun[i].tolist(), "earth_km": earth[i].tolist()}
+                    for i in range(len(sun))],
+    }
+
+
+def calculate_visibility(request: VisibilityRequest) -> dict:
+    if request.mode == "preset":
+        try:
+            site = load_horizon(request.site_id)
+        except UnknownSiteError as exc:
+            raise HTTPException(status_code=404, detail="Unknown site ID") from exc
+        lat, lon = site["lat"], site["lon"]
+    else:
+        lat, lon = request.lat, request.lon
+
+    eph, start, sun_vectors, earth_vectors, sun, earth = sampled_vectors(request)
+    count = len(sun)
+    step_s = eph["step_s"]
 
     sun_el, sun_az = directions(sun, lat, lon)
     earth_el, earth_az = directions(earth, lat, lon)

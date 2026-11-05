@@ -5,7 +5,7 @@ import {SphereGeometry,Vector3,PerspectiveCamera} from 'three';
 import {
  localFrame,siteSurfacePosition,surfaceCoordinates,markerPosition,directionFromAzEl,
  sceneGeometry,sceneCenter,sceneCameraDistance,moonFixedToScene,nasaModelToScene,
- mapSphereToScene,MOON_SCENE_RADIUS,SUN_RADIUS,EARTH_RADIUS,
+ mapSphereToScene,MOON_NORTH,MOON_SCENE_RADIUS,SUN_RADIUS,EARTH_RADIUS,
 } from '../src/lunarSceneMath.js';
 
 const near=(actual,expected,eps=1e-9)=>{
@@ -14,7 +14,7 @@ const near=(actual,expected,eps=1e-9)=>{
 };
 const normalize=v=>{const d=Math.hypot(...v);return v.map(x=>x/d)};
 const dot=(a,b)=>a.reduce((s,x,i)=>s+x*b[i],0);
-const sky={sun:{altitude:20,azimuth:210},earth:{altitude:6,azimuth:75}};
+const vectors={sun_km:[1e8,-4e7,2e5],earth_km:[380000,20000,-4000]};
 const sites=[[-90,0],[-89.4389,-137.1436],[-87,61],[0,0],[28,147],[90,35]];
 
 test('geographic reference directions share the scene frame',()=>{
@@ -64,16 +64,15 @@ test('reference Moon texture UVs agree with coordinates on actual Three sphere v
  sphere.dispose();
 });
 
-test('rays and directional sunlight originate at the displayed selected marker',()=>{
- for(const [lat,lon] of sites){
-  const site={lat,lon};const geo=sceneGeometry(site,sky);
-  near(geo.marker,markerPosition(site));
-  near(normalize(geo.sunPosition.map((v,i)=>v-geo.marker[i])),geo.sunDirection);
-  near(normalize(geo.earthPosition.map((v,i)=>v-geo.marker[i])),geo.earthDirection);
-  assert.ok(Math.hypot(...geo.sunPosition)-SUN_RADIUS>MOON_SCENE_RADIUS);
-  assert.ok(Math.hypot(...geo.earthPosition)-EARTH_RADIUS>MOON_SCENE_RADIUS);
-  assert.ok(Math.abs(dot(geo.sunDirection,geo.frame.up)-Math.sin(20*Math.PI/180))<1e-9);
- }
+test('rays, body positions and light share the Moon origin, with no site input',()=>{
+ const geo=sceneGeometry(vectors);
+ near(geo.origin,[0,0,0]);
+ near(normalize(geo.sunPosition),geo.sunDirection);
+ near(normalize(geo.earthPosition),geo.earthDirection);
+ near(geo.sunDirection,normalize(moonFixedToScene(vectors.sun_km)));
+ near(geo.earthDirection,normalize(moonFixedToScene(vectors.earth_km)));
+ assert.ok(Math.hypot(...geo.sunPosition)-SUN_RADIUS>MOON_SCENE_RADIUS);
+ assert.ok(Math.hypot(...geo.earthPosition)-EARTH_RADIUS>MOON_SCENE_RADIUS);
 });
 
 test('API direction conversion agrees with independent topocentric ephemeris vectors',async()=>{
@@ -95,15 +94,16 @@ test('API direction conversion agrees with independent topocentric ephemeris vec
 
 test('camera fits every body for landscape, portrait and several orbit angles',()=>{
  for(const [lat,lon] of sites)for(const aspect of [.45,1,1.8,3])for(const view of [[0,0,1],[1,0,0],[0,.95,.1],[-1,.2,-1]]){
-  const geo=sceneGeometry({lat,lon},sky),center=sceneCenter(geo);
+  const geo=sceneGeometry(vectors),center=sceneCenter(geo);
   const distance=sceneCameraDistance(geo,view,aspect);
   assert.ok(Number.isFinite(distance)&&distance>0);
   const direction=new Vector3(...view).normalize();
   const camera=new Vector3(...center).addScaledVector(direction,distance);
   const perspective=new PerspectiveCamera(39,aspect,.1,200);
+  perspective.up.set(...(Math.abs(direction.dot(new Vector3(...MOON_NORTH)))>.999?[0,1,0]:MOON_NORTH));
   perspective.position.copy(camera);perspective.lookAt(new Vector3(...center));perspective.updateMatrixWorld();
   const bodies=[[[0,0,0],geo.radius],[geo.sunPosition,SUN_RADIUS],[geo.earthPosition,EARTH_RADIUS],
-   ...Object.values(geo.frame).map(axis=>[geo.marker.map((v,i)=>v+axis[i]*.86),.12])];
+   ...Object.values(geo.frame).map(axis=>[axis.map(v=>v*(geo.axisLength+.16)),.12])];
   for(const [point,radius] of bodies){
    // Project independent surface samples through Three's actual camera matrix.
    for(let latitude=-90;latitude<=90;latitude+=30)for(let longitude=0;longitude<360;longitude+=30){
@@ -115,8 +115,7 @@ test('camera fits every body for landscape, portrait and several orbit angles',(
  }
 });
 
-test('incomplete or invalid directions never produce a fabricated scene',()=>{
- for(const site of [null,{lat:95,lon:0},{lat:0,lon:NaN}])assert.equal(sceneGeometry(site,sky),null);
- for(const invalid of [null,{...sky,sun:{altitude:null,azimuth:0}},{...sky,earth:{altitude:95,azimuth:0}}])assert.equal(sceneGeometry({lat:-85,lon:0},invalid),null);
- assert.equal(sceneGeometry({lat:-85,lon:0},sky,{sunDistance:1}),null);
+test('invalid centered vectors never produce fabricated positions',()=>{
+ for(const invalid of [null,{}, {...vectors,sun_km:[0,0,0]},{...vectors,earth_km:[NaN,2,3]}, {...vectors,sun_km:[1,2]}])assert.equal(sceneGeometry(invalid),null);
+ assert.equal(sceneGeometry(vectors,{sunDistance:1}),null);
 });

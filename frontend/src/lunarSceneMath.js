@@ -1,12 +1,16 @@
 /** One right-handed frame for the Moon, markers, picking, rays and lights.
  * Moon-fixed (X toward lon 0, Y toward lon 90E, Z north) -> scene (Y, X, -Z).
- * The south pole therefore faces the initial camera, along scene +Z.
+ * Surface browsing looks along +Z; the centered orbital view uses lunar north up.
  */
 export const MOON_SCENE_RADIUS = 1.96;
 export const SITE_MARKER_RADIUS = MOON_SCENE_RADIUS + 0.03;
 export const MOON_RADIUS_KM = 1737.4;
 export const SUN_RADIUS = 0.52;
 export const EARTH_RADIUS = 0.43;
+export const MOON_CENTER = Object.freeze([0, 0, 0]);
+export const MOON_NORTH = Object.freeze([0, 0, -1]);
+export const ORBIT_VIEW_DIRECTION = Object.freeze([8, 5, 1.5]);
+export const MOON_FIXED_FRAME = 'MOON_ME_DE440_ME421';
 const radians = degrees => degrees * Math.PI / 180;
 const scale = (v, k) => v.map(x => x * k);
 const add = (a, b) => a.map((v, i) => v + b[i]);
@@ -85,23 +89,24 @@ export function skyFromMoonFixedVectors(site, sun, earth) {
   return sky.sun && sky.earth ? sky : null;
 }
 
-/** Distances/sizes are schematic. Site-to-body directions preserve API az/el. */
-export function sceneGeometry(site, sky, {
+/** Geocentric-style lunar scene: vectors originate at the Moon center.
+ * Surface location never affects celestial placement, lighting or the orbit pivot.
+ * Distances and body radii are schematic; full 3D direction is preserved.
+ */
+export function sceneGeometry(vectors, {
   sunDistance = 6.8, earthDistance = 5.6, radius = MOON_SCENE_RADIUS,
 } = {}) {
-  if (!validSite(site) || !sky || ![sky.sun?.azimuth, sky.sun?.altitude,
-    sky.earth?.azimuth, sky.earth?.altitude, sunDistance, earthDistance, radius].every(Number.isFinite)) return null;
-  if (Math.abs(sky.sun.altitude) > 90 || Math.abs(sky.earth.altitude) > 90 || radius <= 0 ||
-    sunDistance <= 2 * radius + SUN_RADIUS || earthDistance <= 2 * radius + EARTH_RADIUS) return null;
-  const surface = siteSurfacePosition(site.lat, site.lon, radius);
-  const marker = siteSurfacePosition(site.lat, site.lon, radius + 0.03);
-  const frame = localFrame(site.lat, site.lon);
-  const sunDirection = directionFromAzEl(site.lat, site.lon, sky.sun.azimuth, sky.sun.altitude);
-  const earthDirection = directionFromAzEl(site.lat, site.lon, sky.earth.azimuth, sky.earth.altitude);
+  if (!vectors || !finiteVector(vectors.sun_km) || !finiteVector(vectors.earth_km) ||
+      ![sunDistance,earthDistance,radius].every(Number.isFinite) || radius<=0 ||
+      sunDistance<=radius+SUN_RADIUS || earthDistance<=radius+EARTH_RADIUS) return null;
+  const sunDirection=normalized(moonFixedToScene(vectors.sun_km));
+  const earthDirection=normalized(moonFixedToScene(vectors.earth_km));
+  if(!sunDirection||!earthDirection)return null;
   return {
-    surface, marker, frame, sunDirection, earthDirection, radius,
-    sunPosition: add(marker, scale(sunDirection, sunDistance)),
-    earthPosition: add(marker, scale(earthDirection, earthDistance)),
+    origin:[...MOON_CENTER], radius, sunDirection, earthDirection,
+    sunPosition:scale(sunDirection,sunDistance),earthPosition:scale(earthDirection,earthDistance),
+    frame:{prime:[0,1,0],east:[1,0,0],north:[0,0,-1]},
+    axisLength:radius+.8,
   };
 }
 
@@ -115,31 +120,23 @@ export function visibleSceneSpheres(geometry, settings = {}) {
   } else if (settings.showDirectionLines !== false) {
     bodies.push({center: geometry.sunPosition, radius: .02}, {center: geometry.earthPosition, radius: .02});
   }
-  if (settings.showSiteMarker !== false) bodies.push({center: geometry.marker, radius: .09});
+
   if (settings.showAxes !== false) {
-    bodies.push(...Object.values(geometry.frame).map(axis => ({center: add(geometry.marker, scale(axis, .86)), radius: .12})));
+    bodies.push(...Object.values(geometry.frame).map(axis => ({center: scale(axis, geometry.axisLength+.16), radius: .12})));
   }
   return bodies;
 }
 
 export function sceneCenter(geometry, settings = {}) {
-  if (!geometry) return [0, 0, 0];
-  const min = [-geometry.radius, -geometry.radius, -geometry.radius];
-  const max = [geometry.radius, geometry.radius, geometry.radius];
-  for (const {center: point, radius} of visibleSceneSpheres(geometry, settings)) {
-    for (let i = 0; i < 3; i++) {
-      min[i] = Math.min(min[i], point[i] - radius);
-      max[i] = Math.max(max[i], point[i] + radius);
-    }
-  }
-  return min.map((value, i) => (value + max[i]) / 2);
+  return [...MOON_CENTER];
 }
 
 /** Fit every body at the current orbit angle, including narrow/mobile canvases. */
-export function sceneCameraDistance(geometry, viewDirection, aspect, fov = 39, margin = 1.16, target = sceneCenter(geometry), settings = {}) {
+export function sceneCameraDistance(geometry, viewDirection, aspect, fov = 39, margin = 1.16, target = sceneCenter(geometry), settings = {}, cameraUp = MOON_NORTH) {
   const view = finiteVector(viewDirection) && normalized(viewDirection);
   if (!geometry || !view || !(aspect > 0) || !(fov > 0 && fov < 180)) return null;
-  const horizontal = normalized(cross(Math.hypot(view[0], view[2]) < 1e-9 ? [0, 0, 1] : [0, 1, 0], view));
+  const up = Math.abs(dot(view, cameraUp)) > .999 ? [0, 1, 0] : cameraUp;
+  const horizontal = normalized(cross(up, view));
   const vertical = normalized(cross(view, horizontal));
   const tanY = Math.tan(radians(fov / 2)), tanX = tanY * aspect;
   const bodies = visibleSceneSpheres(geometry, settings);

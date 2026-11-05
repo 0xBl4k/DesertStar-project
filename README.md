@@ -100,8 +100,8 @@ Open:
 ## 3D frontend
 
 From `frontend/`, run `npm ci` followed by `npm run dev`. Mission Details and
-Compare include 3D Sun/Earth bodies, site-relative axes and sunlight, a clear
-day/night boundary, optional night highlighting/hatching, and saved scientific
+Compare include Moon-centered 3D Sun/Earth bodies, global axes and sunlight,
+NASA terrain shadows and a clear day/night boundary, optional night highlighting/hatching, and saved scientific
 or cinematic view preferences. **Visual options** opens the controls beneath
 the mission-time panel.
 
@@ -119,6 +119,13 @@ Returns the site catalog from `frontend/data/sites.json`.
 ```bash
 curl http://127.0.0.1:8000/api/sites
 ```
+
+### `POST /api/ephemeris`
+
+Returns site-independent Sun/Earth vectors from the Moon center in kilometers,
+in frame `MOON_ME_DE440_ME421`. Send `start_utc`, `end_utc` and `step_minutes`;
+no site or coordinates are accepted. The same time-range validation and vector
+interpolation serve the visibility endpoint. See `/docs` for its response.
 
 ### `POST /api/visibility`
 
@@ -291,3 +298,11 @@ Potential future improvements include terrain analysis for custom sites, verifie
 ## License
 
 See the repository's [LICENSE](LICENSE) file for licensing terms.
+
+
+### Moon-centered 3D scene
+
+The visualization now uses `POST /api/ephemeris` for Moon-centered Sun/Earth
+vectors and `POST /api/visibility` for selected-site availability. Restart both
+backend and frontend after updating the feature branch. NASA asset provenance,
+rendering limits and setup are documented in [3D visualization](docs/3d-visualization.md).

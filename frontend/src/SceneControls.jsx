@@ -4,8 +4,8 @@ import {SlidersHorizontal,X} from 'lucide-react';
 import {viewPreset,updateScenePreference} from './scenePreferences.js';
 
 const groups=[
- {title:'Day & night',items:[['showTerminator','Day/night boundary'],['showDarkOverlay','Night highlighting'],['highContrastShadow','Strong contrast'],['showHatching','Night hatching','night']]},
- {title:'Scene guides',items:[['show3DObjects','Sun & Earth bodies'],['showDirectionLines','Direction lines'],['showAxes','Local X / Y / Z axes'],['showSiteMarker','Site markers']]},
+ {title:'Day & night',items:[['showTerminator','Day/night boundary'],['showTerrainShadows','Terrain relief shadows'],['showDarkOverlay','Night highlighting'],['highContrastShadow','Strong contrast'],['showHatching','Night hatching','night']]},
+ {title:'Scene guides',items:[['show3DObjects','Sun & Earth bodies'],['showDirectionLines','Direction lines'],['showAxes','Moon-centered X / Y / Z axes'],['showSiteMarker','Site markers']]},
  {title:'Earth sky',items:[['showEarthAtmosphere','Blue atmosphere','bodies'],['showEarthClouds','Cloud layer','bodies']]},
  {title:'Cinematic effects',items:[['showEffects','Enable glow effects'],['showSunGlow','Sun glow','effects'],['showEarthGlow','Earth glow','effects'],['showBloom','Soft bloom','effects']]},
 ];
@@ -37,7 +37,7 @@ export default function SceneControls({settings,onChange}){
    <div className="scene-controls-heading"><strong>3D visual options</strong><button type="button" aria-label="Close visual options" onClick={close}><X size={18}/></button></div>
    <label className="scene-mode-select">View style<select aria-label="View style" value={settings.mode} onChange={event=>onChange(viewPreset(event.target.value))}><option value="scientific">Scientific</option><option value="cinematic">Cinematic</option><option value="custom" disabled>Custom</option></select></label>
    {groups.map(group=><fieldset key={group.title}><legend>{group.title}</legend><div className="scene-option-grid">{group.items.map(([key,label,gate])=><label key={key} className="scene-option"><input type="checkbox" checked={settings[key]} disabled={gate==='effects'?!settings.showEffects||!settings.show3DObjects:gate==='night'?!settings.showDarkOverlay:gate==='bodies'?!settings.show3DObjects:false} onChange={event=>onChange(updateScenePreference(settings,key,event.target.checked))}/><span>{label}</span></label>)}</div></fieldset>)}
-   <p className="scene-options-note">Day/night shading covers the global Moon. Local crater shadows and terrain visibility use separate analysis. Earth clouds are illustrative, not weather data. Hide bodies and direction lines for a closer Moon view.</p>
+   <p className="scene-options-note">Lighting uses the Moon center. Relief shadows render NASA terrain; site visibility comes from the backend. NASA surface and cloud maps are historical imagery. Hide bodies and direction lines for a closer Moon view.</p>
    <button className="scene-reset" type="button" onClick={()=>onChange(viewPreset('scientific'))}>Reset to scientific view</button>
   </div>,document.body)}
  </div>;

@@ -1,3 +1,7 @@
+> The original phase-one site-anchored layout has been superseded. For the
+> current Moon-centered scene, horizontal camera, NASA assets, shadows and
+> backend endpoints, see [3D visualization](3d-visualization.md).
+
 # Phase 1: coherent lunar 3D geometry
 
 Run `npm ci` then `npm run dev` from `frontend/` in the complete repository.
