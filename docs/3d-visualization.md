@@ -121,8 +121,10 @@ from that reference. Camera movement and site selection cannot move the boundary
 Drag the selected-site window’s right edge to resize its width, or its lower-right
 corner to resize both width and height. Focus either handle and use arrow keys
 (Shift for larger steps); Home or the reset button restores automatic sizing.
-The panel leaves room for the Moon and clamps saved dimensions when the viewport
-shrinks. Narrow screens stack the window above the scene and retain height resizing.
+The panel leaves room for the Moon and clamps its displayed dimensions when the
+viewport shrinks. Its preferred dimensions are preserved, so moving back to a
+larger window restores them. Narrow screens stack the window above the scene and
+retain height resizing.
 Contents scroll within the window, so making it smaller does not lose the tabs or
 Add to Compare action. Window dimensions persist across site changes and reloads.
 
@@ -134,6 +136,35 @@ a 280 ms expanding drawer on mobile. The menu icon morphs smoothly; closed links
 are inert and hidden from accessibility. Reduced-motion preferences disable the
 transitions.
 Collapsing a panel does not reset its controls, selected site or playback.
+
+## Desktop resolution support
+
+Desktop layouts above 900 CSS pixels use fluid spacing and typography, with bounded
+sidebar widths rather than stretching the site window across large monitors.
+Layout follows the available browser viewport, so OS display scaling, browser zoom
+and a resized window are handled by the same rules. The existing narrow-screen
+layouts remain in place below that breakpoint.
+
+Short laptop windows reserve vertical space for the Moon. Mission controls and
+site details scroll inside their panels. The time/status arrangement responds to
+the control panel's actual width. Home actions occupy their own grid row, and
+stage hints wrap. The comparison table and its visualization retain separate
+scrollable viewport sections; four-column tables can scroll horizontally while
+the surrounding page remains within the viewport.
+
+Browser layout checks covered all five pages at these CSS viewport sizes:
+
+| Display class | Checked viewports |
+| --- | --- |
+| Small PC / short laptop | 1024×768, 1280×600, 1280×720, 1366×768 |
+| Standard desktop | 1440×900, 1536×864, 1920×1080 |
+| High resolution / ultrawide | 2560×1440, 3440×1440, 3840×2160 |
+
+Additional UI checks cover four-site table scrolling, visualization navigation,
+collapsing menus, and restoring the selected-site panel's preferred width after
+shrinking and enlarging the viewport. These are layout/control checks; the cloud
+browser's WebGL limitation described below still applies. The selected marker's
+18-CSS-pixel diameter is independent of desktop layout sizing.
 
 ## NASA imagery and provenance
 

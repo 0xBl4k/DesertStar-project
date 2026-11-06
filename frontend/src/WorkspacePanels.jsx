@@ -1,6 +1,6 @@
-import React,{useEffect,useId,useRef,useState} from 'react';
+import React,{useEffect,useLayoutEffect,useId,useRef,useState} from 'react';
 import {Menu,RotateCcw} from 'lucide-react';
-import {SITE_WINDOW_KEY,normalizePanelSize,constrainPanelSize} from './panelLayout.js';
+import {SITE_WINDOW_KEY,normalizePanelSize,constrainPanelSize,panelSizeLimits,resolvePanelSize} from './panelLayout.js';
 
 function usePanelOpen(name,initial=true) {
   const key=`lunaris.panel.${name}`;
@@ -29,22 +29,20 @@ export function ResizableSitePanel({children}) {
     try {return normalizePanelSize(JSON.parse(localStorage.getItem(SITE_WINDOW_KEY)||'null'))}
     catch {return normalizePanelSize(null)}
   });
+  const [room,setRoom]=useState({width:1200,height:800,gap:16,sceneMinWidth:340,stacked:false});
   useEffect(()=>{try {localStorage.setItem(SITE_WINDOW_KEY,JSON.stringify(size))}catch {}},[size]);
   const available=()=>{
-    const parent=panel.current.parentElement;
-    return {width:parent.clientWidth-parseFloat(getComputedStyle(parent).paddingLeft)-parseFloat(getComputedStyle(parent).paddingRight),height:parent.clientHeight-parseFloat(getComputedStyle(parent).paddingTop)-parseFloat(getComputedStyle(parent).paddingBottom)};
+    const parent=panel.current.parentElement,style=getComputedStyle(parent);
+    return {width:parent.clientWidth-parseFloat(style.paddingLeft)-parseFloat(style.paddingRight),height:parent.clientHeight-parseFloat(style.paddingTop)-parseFloat(style.paddingBottom),gap:parseFloat(style.columnGap)||0,sceneMinWidth:parseFloat(style.getPropertyValue('--desktop-scene-floor'))||340,stacked:matchMedia('(max-width:900px)').matches};
   };
-  const fit=next=>constrainPanelSize(next,available(),matchMedia('(max-width:900px)').matches);
-  useEffect(()=>{
-    if(!open)return;
-    const observer=new ResizeObserver(()=>setSize(previous=>{
-      if(previous.width===null&&previous.height===null)return previous;
-      const rect=panel.current.getBoundingClientRect(),next=fit({width:previous.width??rect.width,height:previous.height??rect.height});
-      return next.width===previous.width&&next.height===previous.height?previous:next;
-    }));
-    observer.observe(panel.current.parentElement);
+  const fit=next=>{const current=available();return constrainPanelSize(next,current,current.stacked)};
+  useLayoutEffect(()=>{
+    const measure=()=>{const next=available();setRoom(previous=>Object.keys(next).every(key=>previous[key]===next[key])?previous:next)};
+    const observer=new ResizeObserver(measure);
+    observer.observe(panel.current.parentElement);measure();
     return()=>observer.disconnect();
-  },[open]);
+  },[]);
+  const displayed=resolvePanelSize(size,room,room.stacked),bounds=panelSizeLimits(room,room.stacked);
   const start=(event,axis)=>{
     if(event.button!==0)return;
     const rect=panel.current.getBoundingClientRect();
@@ -64,17 +62,15 @@ export function ResizableSitePanel({children}) {
     setSize(fit({width:rect.width+(event.key==='ArrowRight'?step:event.key==='ArrowLeft'?-step:0),height:rect.height+(axis==='both'?(event.key==='ArrowDown'?step:event.key==='ArrowUp'?-step:0):0)}));
   };
   const resizeEvents=axis=>({onPointerDown:event=>start(event,axis),onPointerMove:move,onPointerUp:stop,onPointerCancel:stop,onLostPointerCapture:stop,onKeyDown:event=>keyResize(event,axis)});
-  return <section ref={panel} className={`detail-left left-column site-window ${open?'is-open':'is-collapsed'}`} style={open?{width:size.width??undefined,height:size.height??undefined}:undefined} aria-label="Selected site window">
+  return <section ref={panel} className={`detail-left left-column site-window ${open?'is-open':'is-collapsed'}`} style={open?{width:displayed.width??undefined,height:displayed.height??undefined}:undefined} aria-label="Selected site window">
     <header className="panel-heading">
       <button type="button" className="panel-menu-button" aria-label={`${open?'Collapse':'Expand'} selected site`} aria-expanded={open} aria-controls={id} onClick={()=>setOpen(value=>!value)}><Menu size={18}/></button>
       {open&&<><strong>Selected site</strong><button type="button" className="panel-reset-button" aria-label="Reset selected site window size" title="Reset window size" onClick={()=>setSize(normalizePanelSize(null))}><RotateCcw size={15}/></button></>}
     </header>
     <div id={id} className="site-window-body" hidden={!open}>{children}</div>
     {open&&<>
-      <div role="separator" tabIndex={0} aria-label="Resize selected site width" aria-orientation="vertical" aria-valuemin={280} aria-valuemax={Math.max(280,availableSafeWidth(panel)-340)} aria-valuenow={Math.round(size.width??panel.current?.clientWidth??440)} className="site-window-edge" {...resizeEvents('width')}/>
+      <div role="separator" tabIndex={0} aria-label="Resize selected site width" aria-orientation="vertical" aria-valuemin={bounds.minWidth} aria-valuemax={bounds.maxWidth} aria-valuenow={Math.round(displayed.width??panel.current?.getBoundingClientRect().width??440)} className="site-window-edge" {...resizeEvents('width')}/>
       <button type="button" className="site-window-corner" aria-label="Resize selected site window" title="Drag to resize · Arrow keys resize · Home resets" {...resizeEvents('both')}><span/></button>
     </>}
   </section>;
 }
-
-function availableSafeWidth(panel) {return panel.current?.parentElement?.clientWidth??1200}

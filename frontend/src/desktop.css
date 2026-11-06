@@ -1,0 +1,150 @@
+/* Desktop sizes use the available CSS viewport, including browser/OS scaling. */
+@media(min-width:901px){
+ .app-shell{
+  --desktop-header:clamp(56px,6dvh,76px);
+  --desktop-inline:clamp(14px,2vw,52px);
+  --desktop-block:clamp(8px,1.3dvh,20px);
+  --desktop-gap:clamp(10px,1vw,20px);
+  --desktop-scene-floor:360px;
+  --desktop-scene-min:clamp(220px,34dvh,560px);
+  --desktop-font:clamp(12px,.32vw + 8px,18px);
+  grid-template-rows:var(--desktop-header) minmax(0,1fr);
+ }
+ .site-nav{height:100%;min-height:0;padding-inline:var(--desktop-inline);gap:clamp(12px,1.4vw,28px)}
+ .brand b{font-size:clamp(18px,1.2vw,28px)}
+ .brand small{font-size:clamp(7px,.42vw,10px)}
+ .site-nav .nav-collapse nav{gap:clamp(16px,2.6vw,64px)}
+ .site-nav .nav-collapse nav button{font-size:var(--desktop-font)}
+ .split-view{padding:var(--desktop-block) var(--desktop-inline);gap:var(--desktop-gap)}
+ .btn{font-size:var(--desktop-font);min-height:clamp(38px,4.3dvh,50px)}
+ .panel-heading>strong{font-size:var(--desktop-font)}
+
+ /* Keep the lunar viewport available even on short laptop displays. */
+ .detail-view.split-view{gap:var(--desktop-gap)!important}
+ .detail-view>.site-window{width:clamp(300px,31vw,600px);max-width:calc(100% - var(--desktop-scene-floor) - var(--desktop-gap));container:site-details / inline-size}
+ .detail-view>.detail-right{display:grid;grid-template-rows:minmax(0,1fr) auto;gap:var(--desktop-gap);overflow:hidden}
+ .detail-view>.detail-right>.globe-stage{min-height:0}
+ .detail-view .scene-area{min-height:var(--desktop-scene-min)}
+ .detail-view .right-tools{container:mission-tools / inline-size;min-height:43px;max-height:min(43dvh,480px,calc(100dvh - var(--desktop-header) - var(--desktop-block)*2 - var(--desktop-scene-min) - var(--desktop-gap) - 60px))}
+ .detail-view .right-tools>.collapsible-content{flex:1 1 auto;min-height:0;max-height:none;overflow:auto}
+ .site-window-body{padding:clamp(10px,.8vw,18px)}
+ .site-window-body .details-title h2{font-size:clamp(25px,2vw,44px);overflow-wrap:anywhere}
+ .site-window-body .details-title h4{font-size:clamp(15px,1vw,21px)}
+ .site-window-body .details-title p,.site-window-body .tab-body>p{font-size:var(--desktop-font);line-height:1.55}
+ .site-window-body .tab-body{overflow:auto}
+ .site-window-body .overview-split dl{grid-template-columns:minmax(88px,.6fr) minmax(0,1fr);font-size:var(--desktop-font);overflow-wrap:anywhere}
+ .site-window-body .detail-tabs button{font-size:var(--desktop-font);line-height:1.35}
+ .site-window-body .info-card small{font-size:clamp(10px,.25vw + 7px,15px);white-space:normal;overflow-wrap:anywhere}
+ .site-window-body .info-card strong{font-size:var(--desktop-font)}
+ .site-window-body .notice-line{font-size:var(--desktop-font);overflow-wrap:anywhere}
+
+ /* Guides wrap inside the stage instead of spilling into another panel. */
+ .globe-stage .stage-upper{height:auto;min-height:24px;flex:0 0 auto;gap:4px 10px;padding:4px 2px;flex-wrap:wrap}
+ .globe-stage .stage-gesture{min-width:0;flex:1 1 360px;flex-wrap:wrap;justify-content:flex-end;white-space:normal;font-size:clamp(10px,.65vw,13px);gap:4px 6px;line-height:1.4}
+ .globe-stage .stage-upper .eyebrow{font-size:clamp(9px,.55vw,12px);flex:none}
+ .scene-camera-toolbar{font-size:clamp(10px,.6vw,14px);gap:6px;max-width:calc(100% - 20px)}
+ .scene-camera-toolbar button{min-height:30px;height:auto;font-size:inherit;line-height:1.3}
+ .scene-camera-scope{font-size:clamp(9px,.5vw,12px)}
+ .scene-camera-lock,.scene-boundary-toggle{min-height:28px}
+ .sky3d-legend.collapsible-panel{max-width:min(300px,46%)}
+ .sky3d-legend>.collapsible-content{max-height:32dvh;font-size:clamp(10px,.55vw,14px)}
+ .sky3d-legend small{font-size:clamp(9px,.5vw,13px)}
+ .sky3d-legend>.panel-heading>strong{font-size:var(--desktop-font)}
+
+ /* Time and status controls flow according to their actual panel width. */
+ .mission-control .control-main{gap:clamp(6px,.55vw,12px)}
+ .mission-control .field-date,.mission-control .field-time{min-width:0}
+ .mission-control .control-heading{font-size:var(--desktop-font);flex-wrap:wrap;line-height:1.4}
+ .mission-control .control-heading>span:first-child{flex-wrap:wrap}
+ .mission-control .lunaris-picker-trigger,.mission-control .speed-select{font-size:var(--desktop-font);min-height:34px}
+ .mission-control .slider-labels,.mission-control .cycle-caption{font-size:clamp(10px,.55vw,14px)}
+ .status-box{min-width:0;overflow-wrap:anywhere}
+ .status-box small,.status-box span{font-size:clamp(10px,.25vw + 7px,15px);line-height:1.4}
+ .status-box strong{font-size:clamp(20px,1.4vw,32px);line-height:1.2}
+ .scene-controls-trigger strong,.scene-controls-trigger>span{font-size:var(--desktop-font)}
+
+ /* Keep actions in their own row rather than over the home globe. */
+ .home-view{grid-template-columns:clamp(280px,31vw,680px) minmax(0,1fr);grid-template-rows:auto minmax(0,1fr) auto;gap:var(--desktop-gap);padding:var(--desktop-block) var(--desktop-inline)}
+ .home-copy{grid-column:1;grid-row:1 / 4;max-width:620px;max-height:100%;min-height:0;overflow:auto;padding-right:12px;margin:0;scrollbar-width:thin}
+ .home-copy h1{font-size:clamp(44px,5.1vw,100px);margin:clamp(10px,2dvh,24px) 0}
+ .home-copy>p{font-size:clamp(14px,.85vw,21px);line-height:1.65;max-width:560px}
+ .home-features strong{font-size:clamp(13px,.8vw,20px)}
+ .home-features small{font-size:clamp(12px,.7vw,18px)}
+ .home-features{gap:clamp(12px,2dvh,30px)}
+ .home-bottom-info{font-size:clamp(10px,.55vw,14px);line-height:1.5;white-space:normal}
+ .home-view .top-actions{position:static;grid-column:2;grid-row:1;justify-self:end;flex-wrap:wrap;justify-content:flex-end;gap:var(--desktop-gap);padding:0}
+ .home-view .top-actions .btn{font-size:var(--desktop-font)}
+ .home-view .home-globe{grid-column:2;grid-row:2;margin:0!important;padding:0!important;min-height:0}
+ .home-footnote{position:static;grid-column:2;grid-row:3;transform:none;text-align:center;font-size:clamp(9px,.5vw,13px);white-space:normal;line-height:1.4}
+
+ .search-view{grid-template-columns:clamp(300px,34vw,640px) minmax(0,1fr)}
+ .search-view .search-left{max-width:none;padding:0}
+ .search-left>.collapsible-content{padding:clamp(10px,.8vw,18px)}
+ .search-view .page-intro h2{font-size:clamp(25px,2vw,40px)}
+ .search-view .page-intro p,.search-view .coordinates-form p,.search-view .coordinates-form label{font-size:var(--desktop-font)}
+ .search-view .tab-pills{height:auto;min-height:42px}
+ .search-view .tab-pills button{font-size:clamp(11px,.65vw,16px);padding:7px;white-space:normal;line-height:1.4}
+ .search-view .place-text strong{font-size:clamp(13px,.8vw,19px)}
+ .search-view .place-text small{font-size:clamp(11px,.65vw,16px)}
+ .search-view .place-row{min-height:clamp(57px,6.4dvh,84px)}
+
+ /* Table and visualization each use a viewport; their controls scroll within it. */
+ .compare-page-v2{padding:0 var(--desktop-inline)!important}
+ .compare-page-v2 .comparison-panel{height:100%;min-height:0;padding:var(--desktop-block) 0}
+ .compare-page-v2 .compare-page-head{gap:var(--desktop-gap);flex-wrap:wrap}
+ .compare-page-v2 .compare-page-head p{font-size:var(--desktop-font)}
+ .compare-page-v2 .compare-page-actions{flex-wrap:wrap}
+ .compare-page-v2 .comparison-table-scroll{min-width:0;min-height:0;overflow:auto}
+ .compare-page-v2 .comparison-table th,.compare-page-v2 .comparison-table td{font-size:var(--desktop-font);line-height:1.4;padding:clamp(7px,.6vw,16px)}
+ .compare-page-v2 .comparison-table tbody td{font-size:clamp(14px,.85vw,21px)}
+ .compare-page-v2 .scenario-head strong{font-size:clamp(13px,.85vw,21px);overflow-wrap:anywhere}
+ .compare-page-v2 .scenario-date-fields{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .compare-page-v2 .compare-table-note{flex:none;font-size:clamp(10px,.6vw,15px);overflow-wrap:anywhere}
+ .compare-page-v2 .compare-visualization-section{height:100%;min-height:0;padding:var(--desktop-block) 0;box-sizing:border-box}
+ .compare-page-v2 .compare-visualization-header{flex:none;flex-wrap:wrap;gap:var(--desktop-gap)}
+ .compare-page-v2 .compare-visualization-header h2{font-size:clamp(23px,1.8vw,38px);overflow-wrap:anywhere}
+ .compare-page-v2 .compare-visualization-header p{font-size:var(--desktop-font)}
+ .compare-page-v2 .compare-visual-tabs{flex-wrap:wrap;flex:none}
+ .compare-page-v2 .compare-visual-tabs button{font-size:var(--desktop-font)}
+ .compare-page-v2 .compare-visual-layout{display:grid;grid-template-columns:minmax(0,1fr) clamp(300px,28vw,560px);min-height:0;gap:var(--desktop-gap);flex:1 1 auto}
+ .compare-page-v2 .compare-visual-moon{height:auto!important;min-height:0;min-width:0}
+ .compare-page-v2 .compare-visual-moon>.globe-stage{height:100%;min-height:0}
+ .compare-page-v2 .compare-visual-control{height:100%;min-height:0;gap:0}
+ .compare-page-v2 .compare-visual-control>.collapsible-content{flex:1 1 auto;min-height:0;max-height:none;overflow:auto}
+ .compare-page-v2 .compare-visual-control .status-metrics{flex:none;grid-template-columns:1fr}
+ .compare-page-v2 .compare-visual-control .status-box{min-height:80px;flex:none}
+
+ .about-view{overflow-y:auto!important;align-items:flex-start!important;padding:var(--desktop-block) var(--desktop-inline)!important}
+ .about-box{margin:auto;max-width:1280px;flex-shrink:0}
+ .about-box>p{font-size:clamp(14px,.9vw,21px);line-height:1.65}
+ .about-grid strong{font-size:clamp(15px,1vw,24px)}
+ .about-grid span,.about-box .science-warning{font-size:var(--desktop-font);line-height:1.6}
+ .about-actions{flex-wrap:wrap}
+
+ @container site-details (min-width:520px){
+  .site-window-body .detail-facts{grid-template-columns:repeat(4,minmax(0,1fr))}
+  .site-window-body .detail-tabs button{flex-basis:22%;font-size:clamp(11px,.7vw,16px)}
+  .site-window-body .overview-split{grid-template-columns:minmax(0,1fr) 32%;align-items:start}
+ }
+ @container mission-tools (min-width:680px){
+  .right-tools>.collapsible-content{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(210px,1fr);grid-template-areas:"time metrics" "appearance metrics";gap:8px;align-items:start}
+  .right-tools .mission-control{grid-area:time}
+  .right-tools .scene-controls{grid-area:appearance}
+  .right-tools .status-metrics{grid-area:metrics;grid-template-columns:1fr;gap:6px}
+  .right-tools .status-box{padding:7px 10px;min-height:64px}
+  .right-tools .status-box>div{gap:6px}
+  .right-tools .status-box strong{font-size:clamp(20px,1.3vw,28px)}
+ }
+}
+
+@media(min-width:1440px){.app-shell{--desktop-scene-floor:480px}}
+@media(min-width:2560px){.app-shell{--desktop-scene-floor:640px}}
+@media(min-width:901px) and (max-height:740px){
+ .home-divider{margin:16px 0}
+ .home-features{gap:12px}
+ .home-bottom-info{margin-top:16px}
+ .mission-control{padding:8px}
+ .mission-control .cycle-slider{margin-top:8px}
+ .right-tools>.collapsible-content{padding:6px}
+ .sky3d-legend>.collapsible-content{max-height:min(22dvh,110px)}
+}
