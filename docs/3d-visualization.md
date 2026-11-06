@@ -65,11 +65,13 @@ out to 160 scene units. Ordinary playback preserves the user's orbit and zoom.
 Fit happens on initial load, a scope change, resize, or an explicit Fit command;
 selecting a new location refocuses only while Moon lock is enabled.
 
-**Show site** enables Moon lock and turns toward the selected coordinate. The
-selected marker uses a persistent ring and name label, with a constant pixel size
-through zoom. Markers are raycast onto the actual NASA relief. Labels remain
-visible while the coordinate faces the camera; far-side markers stay occluded.
-The selected name and Show site control remain available even on the far side.
+**Show site** enables Moon lock and turns toward the selected coordinate. Only
+that location is rendered, as a yellow dot with an 18-CSS-pixel diameter. Its
+perspective scale accounts for camera depth, field of view and viewport height,
+so zoom and viewport changes do not shrink it. Other markers, rings, floating
+site names and the on-globe site card are not drawn. The dot is raycast onto the
+actual NASA relief and stays occluded on the far side. A custom surface pick has
+its View details action inside the Locations menu instead of on the Moon.
 Camera scope persists through navigation/reload and appearance preset changes.
 
 Earth's center mainly librates in this Moon-fixed frame; it does not make an
@@ -78,6 +80,11 @@ using Greenwich apparent sidereal time and an IAU lunar attitude model. The
 appearance model is separate from the authoritative DE440 position vectors.
 Pausing, reversing the scrubber, or changing the start time does not accumulate
 rotation drift.
+
+The camera toolbar includes a **Day/night line** checkbox. It controls only the
+reference boundary line, independently of surface lighting and night shading,
+and stays synchronized with Visual options → Day/night boundary line. The choice
+uses the existing saved scene preferences.
 
 ## Moon lighting and terrain shadows
 
@@ -122,6 +129,10 @@ Add to Compare action. Window dimensions persist across site changes and reloads
 Three-line buttons collapse and restore the selected-site window, Locations menu,
 scene guide, and mission controls. Their expanded state persists independently.
 The main navigation also has a working three-line toggle on desktop and mobile.
+Its links stay mounted for a 320 ms width/fade/slide transition on desktop and
+a 280 ms expanding drawer on mobile. The menu icon morphs smoothly; closed links
+are inert and hidden from accessibility. Reduced-motion preferences disable the
+transitions.
 Collapsing a panel does not reset its controls, selected site or playback.
 
 ## NASA imagery and provenance

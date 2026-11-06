@@ -55,10 +55,10 @@ test('selected marker anchors to actual relief and stays the same pixel size dur
  assert.ok(Math.abs(Math.hypot(...anchor)-1.853)<1e-5);
  assert.ok(anchor[1]>1.85);assert.ok(Math.abs(anchor[0])+Math.abs(anchor[2])<1e-8);
  assert.ok(Math.hypot(...siteMarkerAnchor({lat:0,lon:0},null))>MOON_SCENE_RADIUS);
- for(const depth of [.08,2,12,100]){
-  const world=markerWorldScale(depth,39,600,9);
-  const projectedPixels=world/(2*depth*Math.tan(39*Math.PI/360))*600;
-  assert.ok(Math.abs(projectedPixels-9)<1e-10);
+ for(const depth of [.08,2,12,100])for(const fov of [25,39,60])for(const height of [360,600,1080]){
+  const worldRadius=markerWorldScale(depth,fov,height);
+  const projectedDiameter=2*worldRadius/(2*depth*Math.tan(fov*Math.PI/360))*height;
+  assert.ok(Math.abs(projectedDiameter-18)<1e-10,'Selected dot must remain 18 CSS pixels across');
  }
  surface.geometry.dispose();surface.material.dispose();
 });

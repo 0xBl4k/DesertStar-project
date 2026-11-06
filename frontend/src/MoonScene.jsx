@@ -98,7 +98,7 @@ function SceneMarker({site,position,onSelect}){
  useFrame(()=>{
   if(billboard.current&&p){
    const depth=-viewPoint.copy(p).applyMatrix4(camera.matrixWorldInverse).z;
-   billboard.current.scale.setScalar(markerWorldScale(Math.max(.01,depth),camera.fov,size.height,4.5));
+   billboard.current.scale.setScalar(markerWorldScale(Math.max(.01,depth),camera.fov,size.height));
   }
  });
  if(!p)return null;
@@ -205,6 +205,7 @@ export default function MoonScene({modelUrl,onModelLoaded,onModelError,sites,act
   <div className="scene-camera-toolbar" role="group" aria-label="Camera controls">
    <label className="scene-camera-lock"><input type="checkbox" checked={settings.lockOnMoon} onChange={event=>lockMoon(event.target.checked)}/> Lock on Moon</label>
    <span className="scene-camera-scope">{settings.lockOnMoon?'Moon focus':'Whole system focus'}</span>
+   {clockScene&&<label className="scene-boundary-toggle"><input type="checkbox" aria-label="Show day/night boundary line" checked={settings.showTerminator} onChange={event=>onVisualSettingsChange?.(updateScenePreference(visualSettings,'showTerminator',event.target.checked))}/> Day/night line</label>}
    <button type="button" aria-label="Zoom in" title="Zoom in" onClick={()=>issue('zoom',.8)}><ZoomIn size={17}/></button>
    <button type="button" aria-label="Zoom out" title="Zoom out" onClick={()=>issue('zoom',1.25)}><ZoomOut size={17}/></button>
    <button type="button" aria-label="Fit current focus" title="Fit current focus" onClick={()=>issue('fit')}><Scan size={17}/></button>

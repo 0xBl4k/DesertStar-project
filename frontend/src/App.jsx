@@ -1,8 +1,9 @@
 import React,{useState,useEffect,useMemo,useCallback,useRef} from 'react';
-import {Search,ArrowRight,ArrowLeft,BarChart3,Sun,Earth,CalendarDays,Clock3,Play,Pause,RotateCcw,MapPin,Plus,X,Radio,Mountain,Compass,ChevronRight,LocateFixed,Info,FileText,ShieldCheck,Menu,ExternalLink,ChevronLeft,Mouse} from 'lucide-react';
+import {Search,ArrowRight,ArrowLeft,BarChart3,Sun,Earth,CalendarDays,Clock3,Play,Pause,RotateCcw,MapPin,Plus,X,Radio,Mountain,Compass,ChevronRight,LocateFixed,Info,FileText,ShieldCheck,ExternalLink,ChevronLeft,Mouse} from 'lucide-react';
 import MoonScene from './MoonScene.jsx';
 import DateTimePicker from './DateTimePicker.jsx';
 import SceneControls from './SceneControls.jsx';
+import MainNavigation from './MainNavigation.jsx';
 import {CollapsiblePanel,ResizableSitePanel} from './WorkspacePanels.jsx';
 import {SITES,COLORS,fmtAngle,changeHours} from './data.js';
 import {useScenario, useComparisons, useCelestialScenario} from './useBackend.js';
@@ -210,8 +211,8 @@ export default function App(){
  const shared={modelUrl,modelStatus,data:metric,onLoaded:onModelLoaded,onError:onModelError,date,time,setDate,setTime,elapsed,setElapsed,playing,setPlaying,speed,setSpeed,visualSettings,setVisualSettings};
  return <div className="app-shell">
   <header className="site-nav"><button className="brand" onClick={()=>navigate('home')} aria-label="LUNARIS Home"><span className="crescent">◕</span><span><b>LUNARIS</b><small>LUNAR MISSION PLANNER</small></span></button>
-   <nav id="main-navigation" hidden={!menuOpen} className={menuOpen?'open':''} aria-label="Main navigation"><button className={page==='home'?'current':''} onClick={()=>navigate('home')}>Home</button><button className={['search','details'].includes(page)?'current':''} onClick={()=>navigate('search')}>Missions</button><button className={page==='compare'?'current':''} onClick={()=>navigate('compare')}>Compare</button><button className={page==='about'?'current':''} onClick={()=>navigate('about')}>About</button></nav>
-   <div className="nav-right"><button className="nav-menu" onClick={()=>setMenuOpen(v=>!v)} aria-label={menuOpen?"Collapse navigation":"Expand navigation"} aria-expanded={menuOpen} aria-controls="main-navigation">{icon(Menu,22)}</button></div>
+   <MainNavigation open={menuOpen} page={page} onNavigate={navigate}/>
+   <div className="nav-right"><button className="nav-menu" onClick={()=>setMenuOpen(v=>!v)} aria-label={menuOpen?"Collapse navigation":"Expand navigation"} aria-expanded={menuOpen} aria-controls="main-navigation"><span className="nav-menu-lines" aria-hidden="true"><i/><i/><i/></span></button></div>
   </header>
   {page==='home'&&<Home navigate={navigate} sites={sites} activeId={activeId} onSelect={setActiveId} {...shared}/>}
   {page==='search'&&<SearchPage navigate={navigate} sites={sites} activeId={activeId} setActiveId={setActiveId} addCustom={addCustom} addCompare={addCompare} comparePickMode={comparePickMode} cancelComparePick={cancelAddPlace} {...shared}/>}
