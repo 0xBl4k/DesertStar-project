@@ -7,9 +7,9 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from api.schemas import VisibilityRequest
+from api.schemas import VisibilityRequest, EphemerisRequest
 from api.services.data_store import DataStoreError, load_ephemeris, load_horizon
-from api.services.visibility import calculate_visibility, cached_vectors
+from api.services.visibility import calculate_visibility, calculate_ephemeris, cached_vectors
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +40,10 @@ def get_sites():
 @app.post("/api/visibility")
 def visibility_calculation(request: VisibilityRequest):
     return calculate_visibility(request)
+
+@app.post("/api/ephemeris")
+def scene_ephemeris(request: EphemerisRequest):
+    return calculate_ephemeris(request)
 
 @app.get("/health")
 def health():

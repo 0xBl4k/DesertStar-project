@@ -1,6 +1,7 @@
 import React,{useEffect,useRef,useState} from 'react';
 import {createPortal} from 'react-dom';
 import './DateTimePicker.css';
+import {FIRST_START_DATE,LAST_START_DATE} from './timeline.js';
 
 // Shared UTC selectors for Mission Details, Compare and scenario visualizations.
 // The popup is portaled so scrollable comparison tables cannot clip it.
@@ -14,7 +15,7 @@ function timeParts(value){
  const hour=Number.isFinite(h)?Math.max(0,Math.min(23,h)):12;
  return {h:hour%12||12,m:Number.isFinite(m)?Math.max(0,Math.min(59,m)):0,period:hour>=12?'PM':'AM'};
 }
-export default function DateTimePicker({kind='date',value,onChange,ariaLabel,min='2026-11-01',max='2027-10-29'}){
+export default function DateTimePicker({kind='date',value,onChange,ariaLabel,min=FIRST_START_DATE,max=LAST_START_DATE,maxTime='23:59'}){
  const trigger=useRef(null),popup=useRef(null);
  const [open,setOpen]=useState(false);
  const [location,setLocation]=useState({top:0,left:0});
@@ -29,7 +30,7 @@ export default function DateTimePicker({kind='date',value,onChange,ariaLabel,min
   if(!open)return;
   const update=()=>{const box=trigger.current?.getBoundingClientRect();if(!box)return;
     const left=Math.max(8,Math.min(box.left,window.innerWidth-width-8));
-    const approximateHeight=isDate?352:230;
+    const approximateHeight=isDate?352:275;
     const top=box.bottom+approximateHeight+10>window.innerHeight?Math.max(8,box.top-approximateHeight-8):box.bottom+8;
     setLocation({top,left});
   };
@@ -50,9 +51,11 @@ export default function DateTimePicker({kind='date',value,onChange,ariaLabel,min
  const dayCount=new Date(Date.UTC(month.getUTCFullYear(),month.getUTCMonth()+1,0)).getUTCDate();
  const dow=month.getUTCDay();
  const cells=Array.from({length:Math.ceil((dow+dayCount)/7)*7},(_,index)=>index-dow+1);
+ const proposedTime=pad((Number(hour)%12)+(period==='PM'?12:0))+':'+pad(Number(minute));
+ const timeAllowed=proposedTime<=maxTime;
  const saveTime=()=>{
-   const h24=(Number(hour)%12)+(period==='PM'?12:0);
-   onChange(pad(h24)+':'+pad(Number(minute)));setOpen(false);trigger.current?.focus();
+   if(!timeAllowed)return;
+   onChange(proposedTime);setOpen(false);trigger.current?.focus();
  };
  return <span className="lunaris-picker">
    <button ref={trigger} type="button" className="lunaris-picker-trigger" aria-haspopup="dialog" aria-expanded={open} aria-label={ariaLabel||'Choose UTC '+kind} onClick={()=>setOpen(v=>!v)}>
@@ -73,7 +76,7 @@ export default function DateTimePicker({kind='date',value,onChange,ariaLabel,min
       <span className="lunaris-time-colon">:</span>
       <label>Minute<select aria-label="Minute" value={minute} onChange={e=>setMinute(Number(e.target.value))}>{Array.from({length:60},(_,i)=><option key={i} value={i}>{pad(i)}</option>)}</select></label>
       <label>Period<select aria-label="AM or PM" value={period} onChange={e=>setPeriod(e.target.value)}><option>AM</option><option>PM</option></select></label>
-     </div><button type="button" className="lunaris-time-apply" onClick={saveTime}>Set UTC time</button></>}
+     </div>{!timeAllowed&&<p className="lunaris-picker-caption" role="status">Choose {maxTime} UTC or earlier so the full cycle fits the available data.</p>}<button type="button" className="lunaris-time-apply" disabled={!timeAllowed} onClick={saveTime}>Set UTC time</button></>}
    </div>,document.body)}
  </span>;
 }
