@@ -104,6 +104,7 @@ export function sceneGeometry(vectors, {
   if(!sunDirection||!earthDirection)return null;
   return {
     origin:[...MOON_CENTER], radius, sunDirection, earthDirection,
+    sunDistanceKm:Math.hypot(...vectors.sun_km),earthDistanceKm:Math.hypot(...vectors.earth_km),
     sunPosition:scale(sunDirection,sunDistance),earthPosition:scale(earthDirection,earthDistance),
     frame:{prime:[0,1,0],east:[1,0,0],north:[0,0,-1]},
     axisLength:radius+.8,

@@ -40,7 +40,12 @@ for(const date of ['2026-11-01','2026-11-15','2026-11-24','2026-12-24']){
   cases.push({name:date+' / '+view.join(','),sun,camera:view,view:camera.matrixWorldInverse.toArray(),projection:camera.projectionMatrix.toArray(),normal:new Matrix3().getNormalMatrix(camera.matrixWorldInverse).toArray(),expected});
  }
 }
-const data={assets:{sun:fileURLToPath(new URL('../public/assets/sun-nasa-euv.jpg',import.meta.url)),clouds:fileURLToPath(new URL('../public/assets/earth-clouds.jpg',import.meta.url)),moon:fileURLToPath(new URL('../public/assets/lunar-reference.jpg',import.meta.url))},programs:{moon:standardPair(),moonShadow:standardPair(true),mask:pair(lunarMaskVertex,lunarMaskFragment),glow:pair(glowVertex,glowFragment),sun:pair(sunVertexShader,sunFragmentShader),atmosphere:pair(earthShellVertex,atmosphereFragment),clouds:pair(earthShellVertex,cloudsFragment)},positions:Array.from(sphere.attributes.position.array),normals:Array.from(sphere.attributes.normal.array),uv:Array.from(sphere.attributes.uv.array),indices:Array.from(sphere.index.array),cases};
+const seamCamera=new OrthographicCamera(-1.12,1.12,1.12,-1.12,.1,20);
+seamCamera.up.set(0,0,-1);seamCamera.position.set(.01,-4,0);seamCamera.lookAt(.01,0,0);seamCamera.updateMatrixWorld();
+const seamCase={name:'longitude seam with mipmapped texture',sun:[0,-1,0],camera:seamCamera.position.toArray(),
+ view:seamCamera.matrixWorldInverse.toArray(),projection:seamCamera.projectionMatrix.toArray(),
+ normal:new Matrix3().getNormalMatrix(seamCamera.matrixWorldInverse).toArray(),moonTexture:'seamCalibration',nightStrength:0};
+const data={seamCase,assets:{sun:fileURLToPath(new URL('../public/assets/sun-nasa-euv.jpg',import.meta.url)),clouds:fileURLToPath(new URL('../public/assets/earth-clouds.jpg',import.meta.url)),moon:fileURLToPath(new URL('../public/assets/lunar-color-4k.jpg',import.meta.url))},programs:{moon:standardPair(),moonShadow:standardPair(true),mask:pair(lunarMaskVertex,lunarMaskFragment),glow:pair(glowVertex,glowFragment),sun:pair(sunVertexShader,sunFragmentShader),atmosphere:pair(earthShellVertex,atmosphereFragment),clouds:pair(earthShellVertex,cloudsFragment)},positions:Array.from(sphere.attributes.position.array),normals:Array.from(sphere.attributes.normal.array),uv:Array.from(sphere.attributes.uv.array),indices:Array.from(sphere.index.array),cases};
 const args=[fileURLToPath(new URL('./verify-scene-shaders.py',import.meta.url))];
 if(process.env.SHADER_PREVIEW_DIR)args.push(process.env.SHADER_PREVIEW_DIR);
 const run=spawnSync(process.env.PYTHON||'python3',args,{input:JSON.stringify(data),encoding:'utf8',maxBuffer:4*1024*1024});

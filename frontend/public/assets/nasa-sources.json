@@ -1,5 +1,15 @@
 [
   {
+    "file": "lunar-color-4k.jpg",
+    "label": "Moon color (2025), 4K scene map",
+    "source_page": "https://svs.gsfc.nasa.gov/4720/",
+    "source_url": "https://svs.gsfc.nasa.gov/vis/a000000/a004700/a004720/lroc_color_16bit_srgb_4k.tif",
+    "credit": "NASA/SVS; Ernie Wright; LRO/LROC; polar fill from LOLA",
+    "processing": "4096x2048 16-bit sRGB TIFF decoded to 8-bit RGB and encoded as JPEG with Pillow, quality 94, no chroma subsampling, optimize enabled. Color imagery is visual; polar fill has lower source resolution.",
+    "sha256": "56cc0117ac7aa66505c6cdb22c21b1d32dc4ee9030e3c23cd09fe96709c9ca54",
+    "source_sha256": "9731fa8af425b6c2f88f277ecca82bf8c603f3743894f64ed7b25c5bfefa22ff"
+  },
+  {
     "file": "lunar-reference.jpg",
     "label": "Moon color (2025)",
     "source_page": "https://svs.gsfc.nasa.gov/4720/",

@@ -16,12 +16,22 @@ export function createLunarMaterial(map) {
       '#include <displacementmap_vertex>\n vLunarPoint=(modelMatrix*vec4(transformed,1.0)).xyz;');
     shader.fragmentShader=`varying vec3 vLunarPoint;
       uniform vec3 lunarSun; uniform float nightStrength; uniform float nightHatching;
-      ${lunarNightGLSL}\n`+shader.fragmentShader;
+      ${lunarNightGLSL}
+      vec4 sampleLunarMap(sampler2D surfaceMap,vec3 point) {
+        vec3 n=normalize(point),dx=dFdx(n),dy=dFdy(n);
+        float horizontal=max(dot(n.xy,n.xy),1e-8);
+        float latitudeScale=inversesqrt(max(1.0-n.z*n.z,1e-8))/3.14159265359;
+        vec2 uv=vec2(atan(n.x,n.y)/6.28318530718+0.5,
+          asin(clamp(-n.z,-1.0,1.0))/3.14159265359+0.5);
+        // Differentiate the direction, not the wrapped longitude. A numerical
+        // UV jump from 1 to 0 must not select the coarsest, blurred mip level.
+        vec2 ddx=vec2((n.y*dx.x-n.x*dx.y)/(horizontal*6.28318530718),-dx.z*latitudeScale);
+        vec2 ddy=vec2((n.y*dy.x-n.x*dy.y)/(horizontal*6.28318530718),-dy.z*latitudeScale);
+        return textureGrad(surfaceMap,uv,ddx,ddy);
+      }
+      `+shader.fragmentShader;
     shader.fragmentShader=shader.fragmentShader.replace('#include <map_fragment>',`
-      vec3 lunarNormal=normalize(vLunarPoint);
-      vec2 lunarUv=vec2(atan(lunarNormal.x,lunarNormal.y)/6.28318530718+0.5,
-        asin(clamp(-lunarNormal.z,-1.0,1.0))/3.14159265359+0.5);
-      diffuseColor*=texture2D(map,lunarUv);
+      diffuseColor*=sampleLunarMap(map,vLunarPoint);
     `);
     shader.fragmentShader=shader.fragmentShader.replace('#include <opaque_fragment>',`
       #include <opaque_fragment>
@@ -29,7 +39,7 @@ export function createLunarMaterial(map) {
         vLunarPoint,lunarSun,nightStrength,nightHatching);
     `);
   };
-  material.customProgramCacheKey=()=> 'nasa-lunar-surface-v2';
+  material.customProgramCacheKey=()=> 'nasa-lunar-surface-gradients-v3';
   return material;
 }
 

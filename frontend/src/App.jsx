@@ -24,33 +24,34 @@ const showVisibility=v=>v==null?'Not calculated':v?'Visible':'Obstructed';
 const icon=(Icon,size=16)=> <Icon size={size} strokeWidth={1.8} aria-hidden="true"/>;
 function SiteBadge({children,kind='blue'}){return <span className={'chip chip-'+kind}>{children}</span>}
 
-// A site name is revealed only AFTER its yellow marker is clicked.
-// The label itself is the second, explicit action that opens mission details.
-function PlaceLabels({sites,positions,revealedId,onSelect}){
- const label=useMemo(()=>{
-  if(!revealedId||!positions?.width||!positions?.height)return null;
-  const site=sites.find(s=>s.id===revealedId);
-  const pt=positions.points.find(p=>p.id===revealedId&&p.visible);
-  if(!site||!pt)return null;
+// Keep the selected site named while allowing a second marker to be inspected.
+function PlaceLabels({sites,positions,revealedId,selectedId,onSelect}){
+ const labels=useMemo(()=>{
+  if(!positions?.width||!positions?.height)return [];
+  return [...new Set([selectedId,revealedId].filter(Boolean))].flatMap(id=>{
+  const site=sites.find(s=>s.id===id);
+  const pt=positions.points.find(p=>p.id===id&&p.visible);
+  if(!site||!pt)return [];
   const {width,height}=positions;
   const name=site.short||site.name;
   const w=Math.min(width-16,Math.max(112,Math.min(220,name.length*7.7+38)));
   const h=34;
   const x=range(pt.x-w/2,8,Math.max(8,width-w-8));
   const y=site.isMapPick?pt.y+19:(pt.y>h+22?pt.y-h-16:pt.y+19);
-  return {site,name,x,y:range(y,8,Math.max(8,height-h-8)),w:site.isMapPick?Math.min(width-16,166):w,px:pt.x,py:pt.y};
- },[revealedId,sites,positions]);
- if(!label)return null;
+  return [{site,name,x,y:range(y,8,Math.max(8,height-h-8)),w:site.isMapPick?Math.min(width-16,166):w,px:pt.x,py:pt.y}];
+  });
+ },[revealedId,selectedId,sites,positions]);
+ if(!labels.length)return null;
  return <div className="site-label-layer" aria-live="polite">
   <svg className="site-label-leaders" aria-hidden="true" width="100%" height="100%">
-   <path d={`M${label.px} ${label.py} L${label.x+label.w/2} ${label.y+17}`} stroke={label.site.isMapPick?'#ff607a':'#fed166'}/>
+   {labels.map(label=><path key={label.site.id} d={`M${label.px} ${label.py} L${label.x+label.w/2} ${label.y+17}`} stroke={label.site.isMapPick?'#ff607a':'#fed166'}/>)}
   </svg>
-  <button type="button" className={`map-site-label is-active ${label.site.isMapPick?'map-pick-label':''}`} style={{left:label.x,top:label.y,width:label.w,'--tag-color':label.site.isMapPick?'#ff526c':'#f8cf6a'}} onClick={()=>onSelect(label.site.id)} aria-label={`Open details for ${label.site.name}`} title="Open mission details">
+  {labels.map(label=><button key={label.site.id} type="button" className={`map-site-label is-active ${label.site.isMapPick?'map-pick-label':''}`} style={{left:label.x,top:label.y,width:label.w,'--tag-color':label.site.isMapPick?'#ff526c':'#f8cf6a'}} onClick={()=>onSelect(label.site.id)} aria-label={`Open details for ${label.site.name}`} title="Open mission details">
    <span className="map-tag-dot"/><span className="map-tag-text">{label.site.isMapPick?'Show More Details':label.name}</span>{icon(ChevronRight,14)}
-  </button>
+  </button>)}
  </div>;
 }
-function GlobeStage({sites,activeId,compareIds=[],onSelect,modelUrl,modelStatus,onLoaded,onError,compact=false,clock=false,data,elapsed=0,date,time,moonView="default",customPickSite=null,onSurfaceSelect,onPickedDetails,focusOnSite=false,visualSettings=SCIENTIFIC_VIEW}){
+function GlobeStage({sites,activeId,compareIds=[],onSelect,modelUrl,modelStatus,onLoaded,onError,compact=false,clock=false,data,elapsed=0,date,time,moonView="default",customPickSite=null,onSurfaceSelect,onPickedDetails,focusOnSite=false,visualSettings=SCIENTIFIC_VIEW,setVisualSettings}){
  const [positions,setPositions]=useState(null);
  const [revealedId,setRevealedId]=useState(null);
  const sceneSites=useMemo(()=>customPickSite?[...sites.filter(s=>s.id!==customPickSite.id),customPickSite]:sites,[sites,customPickSite]);
@@ -61,7 +62,7 @@ function GlobeStage({sites,activeId,compareIds=[],onSelect,modelUrl,modelStatus,
  useEffect(()=>{setRevealedId(null)},[activeId]);
  useEffect(()=>{if(customPickSite)setRevealedId(customPickSite.id)},[customPickSite]);
  return <section className={`globe-stage ${compact?'compact':''} ${clock?'has-clock':''}`} aria-label="Interactive NASA Moon view">
-  <div className="stage-upper"><span className="eyebrow">NASA / LRO · 3D MOON</span><span className="stage-gesture">{icon(Mouse,16)} <b>Drag</b> to rotate <span>·</span> <b>Double-click</b> to fit <span>·</span> Select a gold dot</span></div>
+  <div className="stage-upper"><span className="eyebrow">NASA / LRO · 3D MOON</span><span className="stage-gesture">{icon(Mouse,16)} <b>Drag</b> to rotate <span>·</span> <b>Scroll / pinch</b> to zoom <span>·</span> <b>Double-click</b> to fit <span>·</span> Select a gold dot</span></div>
   <div className="scene-area">
     {clock&&<div className="sky3d-legend" aria-label="Three-dimensional celestial direction guide">
      <b>{scene?.source==='backend'?'MOON-CENTERED · API':scene?.source==='ephemeris'?'MOON-CENTERED · LOCAL NASA DATA':'3D DATA UNAVAILABLE'}</b>
@@ -72,14 +73,17 @@ function GlobeStage({sites,activeId,compareIds=[],onSelect,modelUrl,modelStatus,
       {visualSettings.showTerminator&&<span><i className="legend-boundary"/> Day/night boundary</span>}
       {visualSettings.showDarkOverlay&&<span><i className="legend-night"/> Night area {visualSettings.showHatching?'· hatched':''}</span>}
       {visualSettings.showAxes&&<small>Moon axes: X/0° · Y/90°E · Z/North</small>}
-      <small>Lunar north up · sizes/distances schematic</small>
+      <small className="scene-scale-note">Schematic view · object sizes and distances are adjusted</small>
+      <small>Real distances: Sun {(scene.geometry.sunDistanceKm/1e6).toFixed(1)} million km · Earth {(scene.geometry.earthDistanceKm/1000).toFixed(1)} thousand km</small>
+      <small>Positions: {scene.source==='backend'?'backend response':'bundled fallback'} · hourly data, interpolated</small>
+      <small>Site visibility: {data?.mode==='terrain'?'backend terrain calculation':data?.mode==='geometry'?'backend geometry, ideal horizon':'backend unavailable'}</small>
       <small>Selected site affects visibility only</small>
       <small>NASA imagery · historical surface maps</small>
       {celestial.error&&<small role="status">Scene API unavailable · using bundled NASA vectors</small>}
      </>:<small>Choose a time within Nov 2026 – Oct 2027</small>}
     </div>}
-    <MoonScene modelUrl={modelUrl} onModelLoaded={onLoaded} onModelError={onError} sites={sceneSites} activeId={activeId} compareIds={compareIds} onSelect={setRevealedId} onSurfaceSelect={onSurfaceSelect} zoomable={true} clockScene={clock} geometry={scene?.geometry} timestamp={scenarioTimestamp(date,time,elapsed)} viewMode={moonView} focusOnSite={focusOnSite} visualSettings={visualSettings} onPositions={setPositions}/>
-    {(!clock||visualSettings.showSiteMarker)&&<PlaceLabels sites={sceneSites} positions={positions} revealedId={revealedId} onSelect={id=>id===customPickSite?.id?onPickedDetails?.():onSelect(id)}/>}
+    <MoonScene modelUrl={modelUrl} onModelLoaded={onLoaded} onModelError={onError} sites={sceneSites} activeId={activeId} compareIds={compareIds} onSelect={setRevealedId} onSurfaceSelect={onSurfaceSelect} zoomable={true} clockScene={clock} geometry={scene?.geometry} timestamp={scenarioTimestamp(date,time,elapsed)} viewMode={moonView} focusOnSite={focusOnSite} visualSettings={visualSettings} onVisualSettingsChange={setVisualSettings} onPositions={setPositions}/>
+    {(!clock||visualSettings.showSiteMarker)&&<PlaceLabels sites={sceneSites} positions={positions} selectedId={clock?activeId:null} revealedId={revealedId} onSelect={id=>id===customPickSite?.id?onPickedDetails?.():onSelect(id)}/>}
   </div>
  </section>
 }

@@ -91,13 +91,17 @@ def run(data):
     tex_image=gl('glTexImage2D',None,c.c_uint,c.c_int,c.c_int,c.c_int,c.c_int,c.c_int,c.c_uint,c.c_uint,c.c_void_p)
     def upload_texture(name,unit,image):
         texture=c.c_uint();gen_textures(1,c.byref(texture));active_texture(0x84C0+unit);bind_texture(0x0DE1,texture)
-        for parameter,value in [(0x2801,0x2601),(0x2800,0x2601),(0x2802,0x812F),(0x2803,0x812F)]:tex_parameter(0x0DE1,parameter,value)
+        for parameter,value in [(0x2801,0x2703),(0x2800,0x2601),(0x2802,0x812F),(0x2803,0x812F)]:tex_parameter(0x0DE1,parameter,value)
         image=image.convert('RGBA').transpose(Image.Transpose.FLIP_TOP_BOTTOM)
         pixels=c.create_string_buffer(image.tobytes());tex_image(0x0DE1,0,0x1908,*image.size,0,0x1908,0x1401,pixels)
+        gl('glGenerateMipmap',None,c.c_uint)(0x0DE1)
         textures[name]=(unit,texture)
     for unit,name in enumerate(['sun','clouds','moon']):upload_texture(name,unit,Image.open(data['assets'][name]))
     upload_texture('clearShadow',3,Image.new('RGBA',(2,2),(255,255,255,255)))
     upload_texture('blockedShadow',4,Image.new('RGBA',(2,2),(0,0,0,0)))
+    calibration=Image.new('RGBA',(1024,512),(0,0,255,255))
+    calibration.paste((255,0,0,255),(0,0,64,512));calibration.paste((255,0,0,255),(960,0,1024,512))
+    upload_texture('seamCalibration',5,calibration)
     enable = gl('glEnable', None, c.c_uint)
     enable(0x0B71)
     enable(0x0B44)
@@ -136,10 +140,10 @@ def run(data):
         matrix3(uniform(program, b'normalMatrix'), 1, 0, (c.c_float * 9)(*case['normal']))
         matrix4(uniform(program,b'viewMatrix'),1,0,(c.c_float*16)(*case['view']))
         for texture_name,label in [('sun',b'surface'),('clouds',b'cloudMap'),('moon',b'map')]:
-            integer(uniform(program,label),textures[texture_name][0])
+            integer(uniform(program,label),textures[case.get('moonTexture','moon') if texture_name=='moon' else texture_name][0])
         integer(uniform(program,b'isOrthographic'),1)
         vector3(uniform(program,b'lunarSun'),*case['sun'])
-        scalar(uniform(program,b'nightStrength'),.9);scalar(uniform(program,b'nightHatching'),hatch)
+        scalar(uniform(program,b'nightStrength'),case.get('nightStrength',.9));scalar(uniform(program,b'nightHatching'),hatch)
         vector3(uniform(program,b'diffuse'),1,1,1);vector3(uniform(program,b'emissive'),0,0,0)
         scalar(uniform(program,b'opacity'),1);scalar(uniform(program,b'roughness'),1);scalar(uniform(program,b'metalness'),0)
         vector3(uniform(program,b'ambientLightColor'),.08,.08,.08)
@@ -204,6 +208,10 @@ def run(data):
     clear_shadow=render('moonShadow',case)
     blocked_shadow=render('moonShadow',case,blocked=True)
     assert sum(clear_shadow[center:center+3])>sum(blocked_shadow[center:center+3])*2, 'Actual lunar material ignores terrain shadow occlusion'
+    seam=render('moon',data['seamCase'])
+    for x in [63,64,65,66]:
+        pixel=(64*128+x)*4;red,green,blue=seam[pixel:pixel+3]
+        assert red>blue*4 and red>green*4, ('Longitude wrap selected a blurred mip level',x,red,green,blue)
     # Optional image dump for visual inspection, without extra dependencies.
     if len(sys.argv) > 1:
         from pathlib import Path
@@ -212,7 +220,7 @@ def run(data):
             pixels=render(name,case)
             rgb=bytes(channel for row in range(127,-1,-1) for col in range(128) for channel in pixels[(row*128+col)*4:(row*128+col)*4+3])
             (folder/(name+'.ppm')).write_bytes(b'P6\n128 128\n255\n'+rgb)
-    print(json.dumps({'shader_programs_compiled': list(programs), 'ephemeris_camera_cases': len(data['cases']), 'day_night_pixel_checks': checked, 'hatching_and_glow': 'passed', 'nasa_maps_surface_shading_shadow_occlusion': 'passed', 'egl_version': [major.value, minor.value]}))
+    print(json.dumps({'shader_programs_compiled': list(programs), 'ephemeris_camera_cases': len(data['cases']), 'day_night_pixel_checks': checked, 'hatching_and_glow': 'passed', 'nasa_maps_surface_shading_shadow_occlusion': 'passed', 'longitude_mipmap_seam': 'passed', 'egl_version': [major.value, minor.value]}))
     bind('eglMakeCurrent', c.c_uint, c.c_void_p, c.c_void_p, c.c_void_p, c.c_void_p)(display, None, None, None)
     bind('eglDestroyContext', c.c_uint, c.c_void_p, c.c_void_p)(display, context)
     bind('eglDestroySurface', c.c_uint, c.c_void_p, c.c_void_p)(display, surface)

@@ -2,6 +2,15 @@
 
 All surface imagery used by the 3D scene is NASA-derived. Lighting, bloom and atmospheric scattering are rendering effects, not NASA observations. Positions use the repository's NASA/JPL NAIF SPICE Moon-centered ephemeris.
 
+## lunar-color-4k.jpg
+
+NASA/SVS; Ernie Wright; LRO/LROC; polar fill from LOLA
+
+Source: https://svs.gsfc.nasa.gov/4720/
+Asset: https://svs.gsfc.nasa.gov/vis/a000000/a004700/a004720/lroc_color_16bit_srgb_4k.tif
+
+4096x2048 16-bit sRGB TIFF decoded to 8-bit RGB and encoded as JPEG with Pillow, quality 94, no chroma subsampling, optimize enabled. This is the scene map. The LROC optical imagery covers 70 degrees north to 70 degrees south; NASA fills the polar regions with lower-resolution LOLA data. Increasing texture dimensions does not create new polar detail. Checksums of the source and delivered asset are in `nasa-sources.json`.
+
 ## lunar-reference.jpg
 
 NASA/SVS; Ernie Wright; LRO/LROC; polar fill from LOLA
@@ -9,7 +18,7 @@ NASA/SVS; Ernie Wright; LRO/LROC; polar fill from LOLA
 Source: https://svs.gsfc.nasa.gov/4720/
 Asset: https://svs.gsfc.nasa.gov/vis/a000000/a004700/a004720/lroc_color_2k.jpg
 
-Original 2048x1024 JPEG, unchanged.
+Original 2048x1024 JPEG, unchanged; retained for UI thumbnails.
 
 ## moon-lola-height.png
 

@@ -1,7 +1,7 @@
 export const SCENE_PREFERENCES_KEY = 'lunaris.scene-preferences.v1';
 
 const shared = {
-  show3DObjects: true, showSiteMarker: true,
+  show3DObjects: true, showSiteMarker: true, lockOnMoon: false,
   showEarthAtmosphere: true, showEarthClouds: true, showTerrainShadows: true,
   showSunGlow: true, showEarthGlow: true, showBloom: true, showHatching: false,
 };
@@ -17,8 +17,10 @@ export const CINEMATIC_VIEW = Object.freeze({
 });
 export const BOOLEAN_PREFERENCES = Object.freeze(Object.keys(SCIENTIFIC_VIEW).filter(key => key !== 'mode'));
 
-export function viewPreset(mode) {
-  return {...(mode === 'cinematic' ? CINEMATIC_VIEW : SCIENTIFIC_VIEW)};
+export function viewPreset(mode,current) {
+  const result={...(mode === 'cinematic' ? CINEMATIC_VIEW : SCIENTIFIC_VIEW)};
+  if(typeof current?.lockOnMoon==='boolean')result.lockOnMoon=current.lockOnMoon;
+  return result;
 }
 
 export function normalizeScenePreferences(value) {

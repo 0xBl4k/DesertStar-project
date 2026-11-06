@@ -35,10 +35,10 @@ export default function SceneControls({settings,onChange}){
   <button ref={trigger} type="button" className="scene-controls-trigger" aria-haspopup="dialog" aria-expanded={open} aria-controls={open?id:undefined} onClick={()=>setOpen(value=>!value)}><SlidersHorizontal size={16}/><strong>Visual options</strong><span>{modeLabel(settings.mode)}</span></button>
   {open&&createPortal(<div id={id} ref={panel} role="dialog" aria-label="3D visual options" className="scene-controls-panel" style={position}>
    <div className="scene-controls-heading"><strong>3D visual options</strong><button type="button" aria-label="Close visual options" onClick={close}><X size={18}/></button></div>
-   <label className="scene-mode-select">View style<select aria-label="View style" value={settings.mode} onChange={event=>onChange(viewPreset(event.target.value))}><option value="scientific">Scientific</option><option value="cinematic">Cinematic</option><option value="custom" disabled>Custom</option></select></label>
+   <label className="scene-mode-select">View style<select aria-label="View style" value={settings.mode} onChange={event=>onChange(viewPreset(event.target.value,settings))}><option value="scientific">Scientific</option><option value="cinematic">Cinematic</option><option value="custom" disabled>Custom</option></select></label>
    {groups.map(group=><fieldset key={group.title}><legend>{group.title}</legend><div className="scene-option-grid">{group.items.map(([key,label,gate])=><label key={key} className="scene-option"><input type="checkbox" checked={settings[key]} disabled={gate==='effects'?!settings.showEffects||!settings.show3DObjects:gate==='night'?!settings.showDarkOverlay:gate==='bodies'?!settings.show3DObjects:false} onChange={event=>onChange(updateScenePreference(settings,key,event.target.checked))}/><span>{label}</span></label>)}</div></fieldset>)}
-   <p className="scene-options-note">Lighting uses the Moon center. Relief shadows render NASA terrain; site visibility comes from the backend. NASA surface and cloud maps are historical imagery. Hide bodies and direction lines for a closer Moon view.</p>
-   <button className="scene-reset" type="button" onClick={()=>onChange(viewPreset('scientific'))}>Reset to scientific view</button>
+   <p className="scene-options-note">Lighting uses the Moon center. Relief shadows render NASA terrain; site visibility comes from the backend. NASA surface and cloud maps are historical imagery. Use “Lock on Moon” and scroll to inspect the surface.</p>
+   <button className="scene-reset" type="button" onClick={()=>onChange(viewPreset('scientific',settings))}>Reset to scientific view</button>
   </div>,document.body)}
  </div>;
 }
