@@ -1,7 +1,9 @@
 export const lunarNightGLSL = `
 float lunarNightWeight(vec3 point,vec3 sun) {
   // The Sun's finite angular radius gives a narrow, smooth global transition.
-  return 1.0-smoothstep(-0.00465,0.00465,dot(normalize(point),normalize(sun)));
+  float cosine=dot(normalize(point),normalize(sun));
+  float width=max(0.00465,fwidth(cosine));
+  return 1.0-smoothstep(-width,width,cosine);
 }
 float lunarHatch(vec3 point) {
   return 1.0-smoothstep(0.10,0.25,abs(sin(dot(normalize(point),vec3(29.0,43.0,17.0)))));

@@ -9,8 +9,8 @@ import {updateScenePreference} from './scenePreferences.js';
 import {EffectComposer,Bloom,ToneMapping} from '@react-three/postprocessing';
 import {ToneMappingMode} from 'postprocessing';
 import {GLTFLoader} from 'three/examples/jsm/loaders/GLTFLoader.js';
-import {TextureLoader,Box3,Vector3,Quaternion,Matrix4,Group,Object3D,MathUtils,SRGBColorSpace,BackSide,AdditiveBlending,RepeatWrapping} from 'three';
-import {COLORS} from './data.js';
+import {TextureLoader,Box3,Vector3,Quaternion,Matrix4,Group,Object3D,SRGBColorSpace,BackSide,AdditiveBlending,RepeatWrapping,PCFSoftShadowMap} from 'three';
+import {smoothLunarTerrain,lunarShadowSize} from './lunarTerrain.js';
 import {createLunarMaterial,updateLunarMaterial} from './lunarSurfaceMaterial.js';
 import LunarIllumination,{BodyGlow} from './LunarIllumination.jsx';
 import {SCIENTIFIC_VIEW,effectiveScenePreferences} from './scenePreferences.js';
@@ -53,6 +53,7 @@ function NASA({url,onLoaded,onSurfaceReady,onSelect,geometry,settings}){
   let radius=0;
   o.traverse(mesh=>{
    if(!mesh.isMesh)return;
+   mesh.geometry=smoothLunarTerrain(mesh.geometry);
    mesh.material=material;
    const positions=mesh.geometry.attributes.position;
    for(let i=0;i<positions.count;i++){
@@ -67,6 +68,7 @@ function NASA({url,onLoaded,onSurfaceReady,onSelect,geometry,settings}){
   normalized.quaternion.copy(NASA_ROTATION);
   return normalized;
  },[gltf,material]);
+ useEffect(()=>()=>{obj.traverse(mesh=>{if(mesh.isMesh)mesh.geometry.dispose()})},[obj]);
  useEffect(()=>{obj.traverse(mesh=>{if(mesh.isMesh){mesh.castShadow=settings.showTerrainShadows;mesh.receiveShadow=settings.showTerrainShadows}})},[obj,settings.showTerrainShadows]);
  useEffect(()=>{obj.updateMatrixWorld(true);onSurfaceReady?.(obj);onLoaded?.()},[url,onLoaded,onSurfaceReady,obj]);
  return <primitive object={obj} onClick={event=>pickMoon(event,onSelect)}/>;
@@ -89,14 +91,14 @@ function ReferenceMoon({geometry,settings,onSelect}){
 function LoadingMoon(){
  return <mesh><sphereGeometry args={[MOON_SCENE_RADIUS,48,32]}/><meshStandardMaterial color="#7f8791" roughness={1}/></mesh>;
 }
-function SceneMarker({site,position,selected,onSelect,color}){
+function SceneMarker({site,position,onSelect}){
  const billboard=useRef(null),{camera,size}=useThree();
  const p=useMemo(()=>position?new Vector3(...position):null,[position]);
  const viewPoint=useMemo(()=>new Vector3(),[]);
  useFrame(()=>{
   if(billboard.current&&p){
    const depth=-viewPoint.copy(p).applyMatrix4(camera.matrixWorldInverse).z;
-   billboard.current.scale.setScalar(markerWorldScale(Math.max(.01,depth),camera.fov,size.height,selected?9:4));
+   billboard.current.scale.setScalar(markerWorldScale(Math.max(.01,depth),camera.fov,size.height,4.5));
   }
  });
  if(!p)return null;
@@ -106,35 +108,11 @@ function SceneMarker({site,position,selected,onSelect,color}){
    <mesh onClick={select} onPointerOver={e=>{e.stopPropagation();document.body.style.cursor='pointer'}} onPointerOut={()=>{document.body.style.cursor='auto'}}>
     <circleGeometry args={[1.45,24]}/><meshBasicMaterial transparent opacity={0} depthWrite={false}/>
    </mesh>
-   <mesh><circleGeometry args={[selected?.32:.55,24]}/><meshBasicMaterial color={color||'#ffd166'} toneMapped={false}/></mesh>
-   {selected&&<><mesh><ringGeometry args={[.78,1,48]}/><meshBasicMaterial color={color||'#ffd166'} toneMapped={false}/></mesh>
-    <mesh><ringGeometry args={[1.13,1.24,48]}/><meshBasicMaterial color="#fff5cf" transparent opacity={.8} toneMapped={false} depthWrite={false}/></mesh></>}
+   <mesh><circleGeometry args={[1,32]}/><meshBasicMaterial color="#ffd166" toneMapped={false}/></mesh>
   </group></Billboard>
  </group>;
 }
 
-/** Labels follow the same geographic positions used by rays and surface picking. */
-function MarkerTracker({sites,anchors,activeId,onPositions,onAnchor}){
- const {camera,size}=useThree();
- const tick=useRef(0),previous=useRef('');
- const positions=useMemo(()=>sites.map(site=>({id:site.id,point:anchors.get(site.id)}))
-  .filter(p=>p.point).map(p=>({...p,point:new Vector3(...p.point)})),[sites,anchors]);
- useFrame((_,delta)=>{
-  tick.current+=delta;if(tick.current<.1)return;tick.current=0;
-  const coords=positions.map(({id,point})=>{
-   const front=point.clone().normalize().dot(camera.position.clone().sub(point))>0;
-   const projected=point.clone().project(camera);
-   const x=(projected.x+1)*size.width/2,y=(1-projected.y)*size.height/2;
-   return {id,x:Math.round(x),y:Math.round(y),visible:front&&projected.z>=-1&&projected.z<=1&&x>=5&&x<=size.width-5&&y>=5&&y<=size.height-5};
-  });
-  const signature=[activeId,size.width,size.height,...coords.map(p=>[p.id,p.x,p.y,+p.visible].join(':'))].join('|');
-  if(signature===previous.current)return;previous.current=signature;
-  onPositions?.({points:coords,width:size.width,height:size.height});
-  const active=coords.find(p=>p.id===activeId);
-  if(active&&onAnchor)onAnchor({x:MathUtils.clamp(active.x/size.width*100,2,98),y:MathUtils.clamp(active.y/size.height*100,2,98)});
- });
- return null;
-}
 function SunBody({position,glow,timestamp}){
  const texture=useLoader(TextureLoader,'/assets/sun-nasa-euv.jpg');
  useMemo(()=>{texture.colorSpace=SRGBColorSpace;texture.wrapS=RepeatWrapping;texture.needsUpdate=true},[texture]);
@@ -175,12 +153,13 @@ function PlainEarth({position}){
 }
 function SunLight({geometry,settings}){
  const target=useMemo(()=>new Object3D(),[]);
+ const {gl}=useThree(),mapSize=lunarShadowSize(gl.capabilities.maxTextureSize);
  return <>
   <primitive object={target} position={geometry.origin}/>
   <directionalLight color="#fff0db" intensity={3.1} position={geometry.sunPosition} target={target} castShadow={settings.showTerrainShadows}
-   shadow-mapSize={[2048,2048]} shadow-camera-left={-2.15} shadow-camera-right={2.15}
-   shadow-camera-top={2.15} shadow-camera-bottom={-2.15} shadow-camera-near={.1} shadow-camera-far={12}
-   shadow-bias={-.000025} shadow-normalBias={.0008} shadow-radius={1.5}/>
+   shadow-mapSize={[mapSize,mapSize]} shadow-camera-left={-2.04} shadow-camera-right={2.04}
+   shadow-camera-top={2.04} shadow-camera-bottom={-2.04} shadow-camera-near={4.6} shadow-camera-far={9}
+   shadow-bias={-.00008} shadow-normalBias={.0012}/>
 
  </>;
 }
@@ -211,11 +190,11 @@ function CinematicEffects(){
   <ToneMapping mode={ToneMappingMode.ACES_FILMIC}/>
  </EffectComposer>;
 }
-export default function MoonScene({modelUrl,onModelLoaded,onModelError,sites,activeId,compareIds=[],onSelect,onSurfaceSelect,focusOnSite=false,zoomable=true,selectedColor,onAnchor,onPositions,clockScene=false,viewMode='default',geometry=null,timestamp=null,visualSettings=SCIENTIFIC_VIEW,onVisualSettingsChange}){
- const selected=sites.find(s=>s.id===activeId)||sites[0];
+export default function MoonScene({modelUrl,onModelLoaded,onModelError,sites,activeId,onSelect,onSurfaceSelect,zoomable=true,clockScene=false,geometry=null,timestamp=null,visualSettings=SCIENTIFIC_VIEW,onVisualSettingsChange}){
+ const selected=sites.find(s=>s.id===activeId);
  const [command,setCommand]=React.useState({serial:0,kind:'fit'});
  const [surface,setSurface]=React.useState(null);
- const anchors=useMemo(()=>new Map(sites.map(site=>[site.id,siteMarkerAnchor(site,surface)])),[sites,surface]);
+ const anchor=useMemo(()=>selected?siteMarkerAnchor(selected,surface):null,[selected,surface]);
  const issue=(kind,factor)=>setCommand(value=>({serial:value.serial+1,kind,factor}));
  const lockMoon=value=>onVisualSettingsChange?.(updateScenePreference(visualSettings,'lockOnMoon',value));
  const geo=clockScene?geometry:null;
@@ -229,11 +208,10 @@ export default function MoonScene({modelUrl,onModelLoaded,onModelError,sites,act
    <button type="button" aria-label="Zoom in" title="Zoom in" onClick={()=>issue('zoom',.8)}><ZoomIn size={17}/></button>
    <button type="button" aria-label="Zoom out" title="Zoom out" onClick={()=>issue('zoom',1.25)}><ZoomOut size={17}/></button>
    <button type="button" aria-label="Fit current focus" title="Fit current focus" onClick={()=>issue('fit')}><Scan size={17}/></button>
-   {selected&&<button type="button" aria-label={`Show selected site: ${selected.name}`} title={`Show ${selected.name} on the Moon`} onClick={()=>{lockMoon(true);issue('site')}}><LocateFixed size={17}/><span>Show site</span></button>}
+   {selected&&<button type="button" aria-label="Show selected location on the Moon" title="Show selected location on the Moon" onClick={()=>{lockMoon(true);issue('site')}}><LocateFixed size={17}/><span>Show site</span></button>}
   </div>
-  {clockScene&&selected&&<div className="scene-selected-status"><i/> Selected: {selected.name}<span>Use “Show site” to face this location.</span></div>}
   <AssetBoundary fallback={<div className="scene-unavailable" role="status"><strong>3D view unavailable</strong><p>This browser could not start WebGL. Try enabling hardware acceleration or opening LUNARIS in a browser with WebGL support.</p></div>}>
-  <Canvas shadows={settings.showTerrainShadows} camera={{position:clockScene?ORBIT_VIEW_DIRECTION:[0,0,7.85],up:clockScene?MOON_NORTH:[0,1,0],fov:39,near:.01,far:300}} dpr={[1,1.8]} gl={{alpha:true,antialias:true,powerPreference:'high-performance'}}>
+  <Canvas shadows={settings.showTerrainShadows?PCFSoftShadowMap:false} camera={{position:clockScene?ORBIT_VIEW_DIRECTION:[0,0,7.85],up:clockScene?MOON_NORTH:[0,1,0],fov:39,near:.01,far:300}} dpr={[1,2]} gl={{alpha:true,antialias:true,powerPreference:'high-performance'}}>
    <ambientLight intensity={geo?(settings.highContrastShadow?.055:.18):.55}/>
    <hemisphereLight intensity={geo?(settings.highContrastShadow?.02:.07):.21} color="#c7ddff" groundColor="#182c4a"/>
    {geo?<SunLight geometry={geo} settings={settings}/>:<>
@@ -245,12 +223,10 @@ export default function MoonScene({modelUrl,onModelLoaded,onModelError,sites,act
      {modelUrl?<NASA url={modelUrl} onLoaded={onModelLoaded} onSurfaceReady={setSurface} {...surfaceProps}/>:<ReferenceMoon {...surfaceProps}/>}
     </AssetBoundary>
    </Suspense>
-   {(!clockScene||settings.showSiteMarker)&&sites.map(s=><SceneMarker key={s.id} site={s} position={anchors.get(s.id)} selected={s.id===selected?.id||compareIds.includes(s.id)}
-    color={s.isMapPick?'#ff526c':compareIds.includes(s.id)?COLORS[compareIds.indexOf(s.id)%COLORS.length]:selectedColor} onSelect={onSelect}/>)}
+   {selected&&(!clockScene||settings.showSiteMarker)&&<SceneMarker key={selected.id} site={selected} position={anchor} onSelect={onSelect}/>}
    {geo&&<><LunarIllumination geometry={geo} settings={settings}/><SceneDirections geometry={geo} settings={settings} timestamp={timestamp}/></>}
    <OrbitControls makeDefault enableZoom={zoomable} minDistance={MIN_CAMERA_DISTANCE} maxDistance={MAX_CAMERA_DISTANCE} zoomSpeed={.8} enablePan={false} enableDamping dampingFactor={.075} rotateSpeed={.52} minPolarAngle={.08} maxPolarAngle={Math.PI-.08}/>
    <SceneCamera geometry={geo} settings={settings} selected={selected} command={command}/>
-   <MarkerTracker sites={sites} anchors={anchors} activeId={activeId} onPositions={onPositions} onAnchor={onAnchor}/>
    {geo&&settings.showBloom&&<CinematicEffects/>}
   </Canvas>
   </AssetBoundary>

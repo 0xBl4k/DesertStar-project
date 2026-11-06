@@ -3,6 +3,7 @@ import {Search,ArrowRight,ArrowLeft,BarChart3,Sun,Earth,CalendarDays,Clock3,Play
 import MoonScene from './MoonScene.jsx';
 import DateTimePicker from './DateTimePicker.jsx';
 import SceneControls from './SceneControls.jsx';
+import {CollapsiblePanel,ResizableSitePanel} from './WorkspacePanels.jsx';
 import {SITES,COLORS,fmtAngle,changeHours} from './data.js';
 import {useScenario, useComparisons, useCelestialScenario} from './useBackend.js';
 import {emptyMetric, metricAt, loadSiteCatalog} from './api.js';
@@ -24,47 +25,16 @@ const showVisibility=v=>v==null?'Not calculated':v?'Visible':'Obstructed';
 const icon=(Icon,size=16)=> <Icon size={size} strokeWidth={1.8} aria-hidden="true"/>;
 function SiteBadge({children,kind='blue'}){return <span className={'chip chip-'+kind}>{children}</span>}
 
-// Keep the selected site named while allowing a second marker to be inspected.
-function PlaceLabels({sites,positions,revealedId,selectedId,onSelect}){
- const labels=useMemo(()=>{
-  if(!positions?.width||!positions?.height)return [];
-  return [...new Set([selectedId,revealedId].filter(Boolean))].flatMap(id=>{
-  const site=sites.find(s=>s.id===id);
-  const pt=positions.points.find(p=>p.id===id&&p.visible);
-  if(!site||!pt)return [];
-  const {width,height}=positions;
-  const name=site.short||site.name;
-  const w=Math.min(width-16,Math.max(112,Math.min(220,name.length*7.7+38)));
-  const h=34;
-  const x=range(pt.x-w/2,8,Math.max(8,width-w-8));
-  const y=site.isMapPick?pt.y+19:(pt.y>h+22?pt.y-h-16:pt.y+19);
-  return [{site,name,x,y:range(y,8,Math.max(8,height-h-8)),w:site.isMapPick?Math.min(width-16,166):w,px:pt.x,py:pt.y}];
-  });
- },[revealedId,selectedId,sites,positions]);
- if(!labels.length)return null;
- return <div className="site-label-layer" aria-live="polite">
-  <svg className="site-label-leaders" aria-hidden="true" width="100%" height="100%">
-   {labels.map(label=><path key={label.site.id} d={`M${label.px} ${label.py} L${label.x+label.w/2} ${label.y+17}`} stroke={label.site.isMapPick?'#ff607a':'#fed166'}/>)}
-  </svg>
-  {labels.map(label=><button key={label.site.id} type="button" className={`map-site-label is-active ${label.site.isMapPick?'map-pick-label':''}`} style={{left:label.x,top:label.y,width:label.w,'--tag-color':label.site.isMapPick?'#ff526c':'#f8cf6a'}} onClick={()=>onSelect(label.site.id)} aria-label={`Open details for ${label.site.name}`} title="Open mission details">
-   <span className="map-tag-dot"/><span className="map-tag-text">{label.site.isMapPick?'Show More Details':label.name}</span>{icon(ChevronRight,14)}
-  </button>)}
- </div>;
-}
 function GlobeStage({sites,activeId,compareIds=[],onSelect,modelUrl,modelStatus,onLoaded,onError,compact=false,clock=false,data,elapsed=0,date,time,moonView="default",customPickSite=null,onSurfaceSelect,onPickedDetails,focusOnSite=false,visualSettings=SCIENTIFIC_VIEW,setVisualSettings}){
- const [positions,setPositions]=useState(null);
- const [revealedId,setRevealedId]=useState(null);
  const sceneSites=useMemo(()=>customPickSite?[...sites.filter(s=>s.id!==customPickSite.id),customPickSite]:sites,[sites,customPickSite]);
  const sceneSite=sceneSites.find(s=>s.id===activeId)||sceneSites[0];
  const celestial=useCelestialScenario(date,time,clock);
  const scene=useMemo(()=>clock?resolveLunarScene(sceneSite,celestial.result,date,time,elapsed):null,[clock,sceneSite,celestial.result,date,time,elapsed]);
  const moment=clock&&date&&time?changeHours(date,time,elapsed):null;
- useEffect(()=>{setRevealedId(null)},[activeId]);
- useEffect(()=>{if(customPickSite)setRevealedId(customPickSite.id)},[customPickSite]);
  return <section className={`globe-stage ${compact?'compact':''} ${clock?'has-clock':''}`} aria-label="Interactive NASA Moon view">
-  <div className="stage-upper"><span className="eyebrow">NASA / LRO · 3D MOON</span><span className="stage-gesture">{icon(Mouse,16)} <b>Drag</b> to rotate <span>·</span> <b>Scroll / pinch</b> to zoom <span>·</span> <b>Double-click</b> to fit <span>·</span> Select a gold dot</span></div>
+  <div className="stage-upper"><span className="eyebrow">NASA / LRO · 3D MOON</span><span className="stage-gesture">{icon(Mouse,16)} <b>Drag</b> to rotate <span>·</span> <b>Scroll / pinch</b> to zoom <span>·</span> <b>Double-click</b> to fit <span>·</span> Selected location shown in gold</span></div>
   <div className="scene-area">
-    {clock&&<div className="sky3d-legend" aria-label="Three-dimensional celestial direction guide">
+    {clock&&<CollapsiblePanel name="scene-guide" title="Scene guide" className="sky3d-legend">
      <b>{scene?.source==='backend'?'MOON-CENTERED · API':scene?.source==='ephemeris'?'MOON-CENTERED · LOCAL NASA DATA':'3D DATA UNAVAILABLE'}</b>
      {moment&&<time dateTime={`${moment.date}T${moment.time}:00Z`}>{moment.date} · {moment.time} UTC</time>}
      {scene?.geometry?<>
@@ -81,9 +51,9 @@ function GlobeStage({sites,activeId,compareIds=[],onSelect,modelUrl,modelStatus,
       <small>NASA imagery · historical surface maps</small>
       {celestial.error&&<small role="status">Scene API unavailable · using bundled NASA vectors</small>}
      </>:<small>Choose a time within Nov 2026 – Oct 2027</small>}
-    </div>}
-    <MoonScene modelUrl={modelUrl} onModelLoaded={onLoaded} onModelError={onError} sites={sceneSites} activeId={activeId} compareIds={compareIds} onSelect={setRevealedId} onSurfaceSelect={onSurfaceSelect} zoomable={true} clockScene={clock} geometry={scene?.geometry} timestamp={scenarioTimestamp(date,time,elapsed)} viewMode={moonView} focusOnSite={focusOnSite} visualSettings={visualSettings} onVisualSettingsChange={setVisualSettings} onPositions={setPositions}/>
-    {(!clock||visualSettings.showSiteMarker)&&<PlaceLabels sites={sceneSites} positions={positions} selectedId={clock?activeId:null} revealedId={revealedId} onSelect={id=>id===customPickSite?.id?onPickedDetails?.():onSelect(id)}/>}
+    </CollapsiblePanel>}
+    <MoonScene modelUrl={modelUrl} onModelLoaded={onLoaded} onModelError={onError} sites={sceneSites} activeId={customPickSite?.id||activeId} onSelect={id=>id===customPickSite?.id?onPickedDetails?.():onSelect(id)} onSurfaceSelect={onSurfaceSelect} zoomable={true} clockScene={clock} geometry={scene?.geometry} timestamp={scenarioTimestamp(date,time,elapsed)} viewMode={moonView} focusOnSite={focusOnSite} visualSettings={visualSettings} onVisualSettingsChange={setVisualSettings}/>
+
   </div>
  </section>
 }
@@ -93,7 +63,7 @@ function Home({navigate,sites,activeId,onSelect,...globeProps}){
    <div className="home-copy"><span className="eyebrow">EXPLORE · ANALYZE · PLAN</span><h1>LUNAR<br/><em>SOUTH</em> POLE</h1><p>Explore potential landing regions and understand the sunlight and Earth visibility that shape missions to the Moon.</p>
      <div className="home-divider"/>
      <div className="home-features"><div>{icon(Sun,27)}<span><strong>Solar power</strong><small>Lighting & shadow conditions</small></span></div><div>{icon(Radio,27)}<span><strong>Earth visibility</strong><small>Direct communication windows</small></span></div><div>{icon(BarChart3,27)}<span><strong>Compare sites</strong><small>Find mission trade-offs</small></span></div></div>
-     <div className="home-bottom-info"><span className="gold-dot"/> SELECT ANY YELLOW DOT TO EXPLORE</div>
+     <div className="home-bottom-info"><span className="gold-dot"/> CHOOSE A LOCATION TO EXPLORE</div>
    </div>
    <ActionButtons navigate={navigate}/>
    <div className="home-globe"><GlobeStage {...globeProps} sites={sites} activeId={activeId} moonView="home" onSelect={id=>{onSelect(id);navigate('details');}}/></div>
@@ -117,14 +87,15 @@ function SearchPage({sites,activeId,setActiveId,addCustom,navigate,addCompare,co
  const submit=e=>{e.preventDefault();const lt=Number(lat),ln=Number(lon),name=locationName.trim();if(!name){setError('Please enter a name for this location.');return;}if(!Number.isFinite(lt)||!Number.isFinite(ln)||lat.trim()===''||lon.trim()===''||lt<-90||lt>90||ln<-180||ln>180){setError('Latitude must be −90 to 90; longitude −180 to 180.');return;}
    setError('');const id=makeId();addCustom({id,name,short:name,kind:'Custom coordinates',lat:lt,lon:ln,pin:[Math.min(.83,(90+lt)/12)*Math.sin(ln*Math.PI/180),Math.min(.83,(90+lt)/12)*Math.cos(ln*Math.PI/180)],type:'Custom location',summary:'Your selected lunar coordinates are ready for geometric Sun and Earth exploration.',why:'Custom coordinates let you examine arbitrary locations, but local terrain must be checked separately.',resources:'Custom coordinates · unverified terrain'});if(comparePickMode)addCompare(id);else navigate('details');};
  return <main className="view split-view search-view view-enter">
-  <section className="search-left left-column">
+  <CollapsiblePanel name="location-menu" title="Locations" className="search-left left-column">
     <header className="page-intro"><span className="eyebrow">LANDING REGION EXPLORER</span><h2>Search for Places</h2><p>Choose a region to open its mission details instantly, or enter your own coordinates.</p></header>
     {comparePickMode&&<div className="compare-pick-banner"><span>Adding a place to Compare</span><button onClick={cancelComparePick}>{icon(ArrowLeft,15)} Back to table</button></div>}
     <div className="tab-pills"><button className={tab==='missions'?'active':''} onClick={()=>setTab('missions')}>⌾ &nbsp; Terrain Presets &amp; NASA Regions</button><button className={tab==='coordinates'?'active':''} onClick={()=>setTab('coordinates')}>{icon(MapPin,15)} &nbsp; Custom Coordinates</button></div>
     {tab==='missions'?<div className="search-list-content"><label className="search-input">{icon(Search,17)}<input placeholder="Search a region name..." value={term} onChange={e=>setTerm(e.target.value)}/></label><div className="places-list" role="region" aria-label="Scrollable lunar landing site list" tabIndex="0">{filtered.length?filtered.map(s=><button key={s.id} className={`place-row ${activeId===s.id?'selected':''}`} onClick={()=>choose(s.id)} aria-label={`${comparePickMode?'Add to comparison':'Open details for'} ${s.name}`} title={comparePickMode?`Add ${s.name} to comparison`:`View details: ${s.name}`}><div className="place-thumbnail">{icon(Mountain,23)}</div><div className="place-text"><strong>{s.name}</strong><small>{s.kind} · {s.type}</small></div>{icon(ChevronRight,18)}</button>):<div className="empty-msg">No matching regions.</div>}</div></div>:<form className="coordinates-form" onSubmit={submit}><p>Enter a name and lunar geographic coordinates to examine a custom site.</p><label>Location name <input type="text" required maxLength={48} value={locationName} onChange={e=>setLocationName(e.target.value)} placeholder="e.g. My south-pole site"/></label><label>Latitude <span>(degrees)</span><input type="number" step="0.01" value={lat} onChange={e=>setLat(e.target.value)}/></label><label>Longitude <span>(degrees)</span><input type="number" step="0.01" value={lon} onChange={e=>setLon(e.target.value)}/></label>{error&&<div className="form-error" role="alert">{error}</div>}<button className="btn btn-blue full" type="submit">{icon(LocateFixed,17)} {comparePickMode?'Add to Comparison':'Analyze this location'} {icon(ArrowRight,17)}</button></form>}
 
-  </section>
-  <div className="search-right right-column"><GlobeStage {...globeProps} sites={sites} activeId={activeId} onSelect={choose} onSurfaceSelect={pickMoon} customPickSite={pickedSite} onPickedDetails={openPicked} compact/><div className="right-caption"><span className="gold-dot"/> CLICK ANY YELLOW MARKER TO SELECT A REGION <span className="caption-right">NASA GSFC / LRO</span></div></div>
+    {pickedSite&&<div className="picked-location-card"><span className="gold-dot"/><div><strong>Selected coordinates</strong><small>{pickedSite.lat.toFixed(3)}° · {pickedSite.lon.toFixed(3)}°</small></div><button type="button" className="btn btn-blue" onClick={openPicked}>View details {icon(ArrowRight,15)}</button></div>}
+  </CollapsiblePanel>
+  <div className="search-right right-column"><GlobeStage {...globeProps} sites={sites} activeId={activeId} onSelect={choose} onSurfaceSelect={pickMoon} customPickSite={pickedSite} onPickedDetails={openPicked} compact/><div className="right-caption"><span className="gold-dot"/> CHOOSE FROM THE LIST OR CLICK THE MOON <span className="caption-right">NASA GSFC / LRO</span></div></div>
  </main>
 }
 function InfoCard({Icon,label,value,subtitle}){return <div className="info-card">{icon(Icon,20)}<span><small>{label}</small><strong>{value}</strong>{subtitle&&<em>{subtitle}</em>}</span></div>}
@@ -165,12 +136,12 @@ function DetailPage({sites,activeId,setActiveId,addCompare,navigate,metric,elaps
  const [tab,setTab]=useState('overview');
  const rightMetric=metric;
  return <main className="view split-view detail-view view-enter">
-   <section className="detail-left left-column"><button className="back-button" onClick={()=>navigate('search')}>{icon(ArrowLeft,18)} Back to Search</button><div className="details-title"><div className="breadcrumb">{site.backendSiteId?'SCIENTIFIC / TERRAIN PRESET':site.kind==='Custom coordinates'?'CUSTOM / USER-DEFINED LOCATION':'NASA / ARTEMIS / CANDIDATE REGION'} &nbsp; <SiteBadge>{site.backendSiteId?'TERRAIN':'EXPLORATORY'}</SiteBadge></div><h2>{site.name}</h2><h4>{site.backendSiteId?'Lunar South Pole · Terrain Sample':site.kind==='Custom coordinates'?'Custom lunar coordinates':'Lunar South Pole · Artemis Candidate'}</h4><p>{site.summary}</p></div>
+   <ResizableSitePanel><button className="back-button" onClick={()=>navigate('search')}>{icon(ArrowLeft,18)} Back to Search</button><div className="details-title"><div className="breadcrumb">{site.backendSiteId?'SCIENTIFIC / TERRAIN PRESET':site.kind==='Custom coordinates'?'CUSTOM / USER-DEFINED LOCATION':'NASA / ARTEMIS / CANDIDATE REGION'} &nbsp; <SiteBadge>{site.backendSiteId?'TERRAIN':'EXPLORATORY'}</SiteBadge></div><h2>{site.name}</h2><h4>{site.backendSiteId?'Lunar South Pole · Terrain Sample':site.kind==='Custom coordinates'?'Custom lunar coordinates':'Lunar South Pole · Artemis Candidate'}</h4><p>{site.summary}</p></div>
      <div className="detail-facts"><InfoCard Icon={MapPin} label="Latitude" value={`${Math.abs(site.lat).toFixed(2)}° S`}/><InfoCard Icon={Compass} label="Longitude" value={`${Math.abs(site.lon).toFixed(2)}° ${site.lon<0?'W':'E'}`}/><InfoCard Icon={Mountain} label="Region type" value={site.type}/><InfoCard Icon={ShieldCheck} label={site.kind==='Custom coordinates'?'Location type':'NASA selection'} value={site.backendSiteId?'Terrain profile':site.kind==='Custom coordinates'?'User-defined':'Candidate'}/></div>
      <DetailsTabs site={site} tab={tab} setTab={setTab} m={rightMetric}/>
      <button className="btn btn-gold compare-cta" onClick={()=>addCompare(site.id)}>{icon(BarChart3,19)} Add to Compare {icon(ArrowRight,19)}</button>
-   </section>
-   <div className="detail-right right-column"><GlobeStage {...rightProps} sites={sites} activeId={activeId} onSelect={setActiveId} moonView="details" compact clock data={rightMetric} elapsed={elapsed}/><div className="right-tools"><MissionTime {...rightProps} elapsed={elapsed}/><SceneControls settings={rightProps.visualSettings} onChange={rightProps.setVisualSettings}/><StatusMetrics metric={rightMetric}/></div></div>
+   </ResizableSitePanel>
+   <div className="detail-right right-column"><GlobeStage {...rightProps} sites={sites} activeId={activeId} onSelect={setActiveId} moonView="details" compact clock data={rightMetric} elapsed={elapsed}/><CollapsiblePanel name="detail-tools" title="Mission controls" className="right-tools"><MissionTime {...rightProps} elapsed={elapsed}/><SceneControls settings={rightProps.visualSettings} onChange={rightProps.setVisualSettings}/><StatusMetrics metric={rightMetric}/></CollapsiblePanel></div>
  </main>
 }
 function ComparePage({sites,activeId,setActiveId,compareIds,setCompareIds,compareDates,setCompareDates,compareTimes,setCompareTimes,date,time,setDate,setTime,setElapsed,setPlaying,navigate,onAddPlace,elapsed,playing,...globeProps}){
@@ -208,7 +179,7 @@ function ComparePage({sites,activeId,setActiveId,compareIds,setCompareIds,compar
     <div className="compare-visual-tabs" role="group" aria-label="Choose scenario to visualize">{compared.map(s=><button className={visualSite?.id===s.id?'active':''} key={s.id} onClick={()=>{setVisualId(s.id);setActiveId(s.id);setElapsed(0);setPlaying(false)}}>{s.name}</button>)}</div>
     <div className="compare-visual-layout">
       <div className="compare-visual-moon"><GlobeStage {...globeProps} sites={sites} activeId={visualSite.id} onSelect={id=>{setActiveId(id);navigate('details')}} focusOnSite clock compact data={visualMetric} elapsed={elapsed} date={visualDate} time={visualTime}/></div>
-      <div className="compare-visual-control"><MissionTime date={visualDate} time={visualTime} setDate={v=>{setCompareDates(old=>({...old,[visualSite.id]:v}));setElapsed(0);setPlaying(false)}} setTime={v=>{setCompareTimes(old=>({...old,[visualSite.id]:v}));setElapsed(0);setPlaying(false)}} elapsed={elapsed} setElapsed={setElapsed} playing={playing} setPlaying={setPlaying} speed={globeProps.speed} setSpeed={globeProps.setSpeed}/><SceneControls settings={globeProps.visualSettings} onChange={globeProps.setVisualSettings}/><StatusMetrics metric={visualMetric}/></div>
+      <CollapsiblePanel name="compare-tools" title="Mission controls" className="compare-visual-control"><MissionTime date={visualDate} time={visualTime} setDate={v=>{setCompareDates(old=>({...old,[visualSite.id]:v}));setElapsed(0);setPlaying(false)}} setTime={v=>{setCompareTimes(old=>({...old,[visualSite.id]:v}));setElapsed(0);setPlaying(false)}} elapsed={elapsed} setElapsed={setElapsed} playing={playing} setPlaying={setPlaying} speed={globeProps.speed} setSpeed={globeProps.setSpeed}/><SceneControls settings={globeProps.visualSettings} onChange={globeProps.setVisualSettings}/><StatusMetrics metric={visualMetric}/></CollapsiblePanel>
     </div>
   </section>}
  </main>
@@ -219,7 +190,7 @@ export default function App(){
  const [sites,setSites]=useState(SITES),[activeId,setActiveId]=useState(SITES[0].id),[compareIds,setCompareIds]=useState(['Site01_highest_point']),[compareDates,setCompareDates]=useState({}),[compareTimes,setCompareTimes]=useState({}),[comparePickMode,setComparePickMode]=useState(false);
  const [date,setDate]=useState(INITIAL_DATE),[time,setTime]=useState(INITIAL_TIME),[elapsed,setElapsed]=useState(0),[playing,setPlaying]=useState(false),[speed,setSpeed]=useState(1);
  const [modelUrl,setModelUrl]=useState(null),[modelStatus,setModelStatus]=useState('loading'),[modelMsg,setModelMsg]=useState('');
- const [menuOpen,setMenuOpen]=useState(false);
+ const [menuOpen,setMenuOpen]=useState(()=>matchMedia('(min-width:661px)').matches);
  const [visualSettings,setVisualSettings]=useState(loadScenePreferences);
  useEffect(()=>{saveScenePreferences(visualSettings)},[visualSettings]);
  const activeSite=sites.find(s=>s.id===activeId)||sites[0];
@@ -229,7 +200,7 @@ export default function App(){
  useEffect(()=>{let mounted=true;fetch('/models/nasa-moon-color.glb',{method:'HEAD',cache:'no-cache'}).then(r=>{if(!mounted)return;const len=Number(r.headers.get('content-length')||0);if(r.ok&&(len>10000000||r.headers.get('content-type')?.includes('gltf-binary')||(len>10000&&r.headers.get('content-type')?.includes('octet-stream')))){setModelUrl('/models/nasa-moon-color.glb');setModelStatus('loading')}else{setModelStatus('demo');setModelMsg('Official model missing; use the NASA download instructions in README.')}}).catch(()=>{if(mounted)setModelStatus('demo')});return()=>{mounted=false}},[]);
  useEffect(()=>{if(!playing)return;let raf=0,last=0;const frame=(now)=>{if(last){const dt=(now-last)/1000;if(dt>=1/32){last=now;setElapsed(h=>{const v=advancePlayback(h,dt,speed);if(v>=HOURS_PER_SCENARIO){setPlaying(false);return HOURS_PER_SCENARIO}return v})}}else{last=now}raf=requestAnimationFrame(frame)};raf=requestAnimationFrame(frame);return()=>cancelAnimationFrame(raf)},[playing,speed]);
  useEffect(()=>{const handle=()=>{const name=location.hash.replace('#/','');if(['home','search','details','compare','about'].includes(name))setPage(name)};window.addEventListener('hashchange',handle);return()=>window.removeEventListener('hashchange',handle)},[]);
- const navigate=useCallback(p=>{setPage(p);setMenuOpen(false);window.location.hash='/'+p;setPlaying(false)},[]);
+ const navigate=useCallback(p=>{setPage(p);if(matchMedia('(max-width:660px)').matches)setMenuOpen(false);window.location.hash='/'+p;setPlaying(false)},[]);
  const addCompare=id=>{setCompareIds(prev=>prev.includes(id)?prev:prev.length<4?[...prev,id]:prev);setActiveId(id);setComparePickMode(false);navigate('compare')};
  const startAddPlace=()=>{if(compareIds.length>=4)return;setComparePickMode(true);navigate('search')};
  const cancelAddPlace=()=>{setComparePickMode(false);navigate('compare')};
@@ -239,8 +210,8 @@ export default function App(){
  const shared={modelUrl,modelStatus,data:metric,onLoaded:onModelLoaded,onError:onModelError,date,time,setDate,setTime,elapsed,setElapsed,playing,setPlaying,speed,setSpeed,visualSettings,setVisualSettings};
  return <div className="app-shell">
   <header className="site-nav"><button className="brand" onClick={()=>navigate('home')} aria-label="LUNARIS Home"><span className="crescent">◕</span><span><b>LUNARIS</b><small>LUNAR MISSION PLANNER</small></span></button>
-   <nav className={menuOpen?'open':''} aria-label="Main navigation"><button className={page==='home'?'current':''} onClick={()=>navigate('home')}>Home</button><button className={['search','details'].includes(page)?'current':''} onClick={()=>navigate('search')}>Missions</button><button className={page==='compare'?'current':''} onClick={()=>navigate('compare')}>Compare</button><button className={page==='about'?'current':''} onClick={()=>navigate('about')}>About</button></nav>
-   <div className="nav-right"><button className="nav-menu" onClick={()=>setMenuOpen(v=>!v)} aria-label="Toggle navigation">{icon(Menu,22)}</button></div>
+   <nav id="main-navigation" hidden={!menuOpen} className={menuOpen?'open':''} aria-label="Main navigation"><button className={page==='home'?'current':''} onClick={()=>navigate('home')}>Home</button><button className={['search','details'].includes(page)?'current':''} onClick={()=>navigate('search')}>Missions</button><button className={page==='compare'?'current':''} onClick={()=>navigate('compare')}>Compare</button><button className={page==='about'?'current':''} onClick={()=>navigate('about')}>About</button></nav>
+   <div className="nav-right"><button className="nav-menu" onClick={()=>setMenuOpen(v=>!v)} aria-label={menuOpen?"Collapse navigation":"Expand navigation"} aria-expanded={menuOpen} aria-controls="main-navigation">{icon(Menu,22)}</button></div>
   </header>
   {page==='home'&&<Home navigate={navigate} sites={sites} activeId={activeId} onSelect={setActiveId} {...shared}/>}
   {page==='search'&&<SearchPage navigate={navigate} sites={sites} activeId={activeId} setActiveId={setActiveId} addCustom={addCustom} addCompare={addCompare} comparePickMode={comparePickMode} cancelComparePick={cancelAddPlace} {...shared}/>}

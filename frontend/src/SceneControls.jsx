@@ -5,7 +5,7 @@ import {viewPreset,updateScenePreference} from './scenePreferences.js';
 
 const groups=[
  {title:'Day & night',items:[['showTerminator','Day/night boundary'],['showTerrainShadows','Terrain relief shadows'],['showDarkOverlay','Night highlighting'],['highContrastShadow','Strong contrast'],['showHatching','Night hatching','night']]},
- {title:'Scene guides',items:[['show3DObjects','Sun & Earth bodies'],['showDirectionLines','Direction lines'],['showAxes','Moon-centered X / Y / Z axes'],['showSiteMarker','Site markers']]},
+ {title:'Scene guides',items:[['show3DObjects','Sun & Earth bodies'],['showDirectionLines','Direction lines'],['showAxes','Moon-centered X / Y / Z axes'],['showSiteMarker','Selected location dot']]},
  {title:'Earth sky',items:[['showEarthAtmosphere','Blue atmosphere','bodies'],['showEarthClouds','Cloud layer','bodies']]},
  {title:'Cinematic effects',items:[['showEffects','Enable glow effects'],['showSunGlow','Sun glow','effects'],['showEarthGlow','Earth glow','effects'],['showBloom','Soft bloom','effects']]},
 ];

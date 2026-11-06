@@ -82,8 +82,12 @@ rotation drift.
 ## Moon lighting and terrain shadows
 
 Parallel sunlight points from the Sun toward the Moon origin. The displayed
-Sun position and light use the same centered direction. Optional 2048-pixel
-soft shadow maps let the NASA LRO mesh cast and receive relief shadows.
+Sun position and light use the same centered direction. Filtered 4096-pixel
+shadow maps (2048 on smaller GPUs), a tighter light-camera depth range and tuned
+depth bias let the NASA LRO mesh cast and receive relief shadows. Smooth normals
+are reconstructed across its split face/UV vertices without moving any terrain
+vertices or changing triangle boundaries. The day/night shader also uses screen
+derivatives to antialias the narrow transition.
 These shadows show the resolution of the rendered model; they are not a
 validated per-crater planning product.
 
@@ -104,6 +108,21 @@ narrow smooth day/night transition. The former floating spherical mask is no
 longer drawn. The optional boundary line is a spherical reference great circle
 perpendicular to the global Sun vector; detailed terrain shadows may differ
 from that reference. Camera movement and site selection cannot move the boundary.
+
+## Resizable site window and collapsible menus
+
+Drag the selected-site window’s right edge to resize its width, or its lower-right
+corner to resize both width and height. Focus either handle and use arrow keys
+(Shift for larger steps); Home or the reset button restores automatic sizing.
+The panel leaves room for the Moon and clamps saved dimensions when the viewport
+shrinks. Narrow screens stack the window above the scene and retain height resizing.
+Contents scroll within the window, so making it smaller does not lose the tabs or
+Add to Compare action. Window dimensions persist across site changes and reloads.
+
+Three-line buttons collapse and restore the selected-site window, Locations menu,
+scene guide, and mission controls. Their expanded state persists independently.
+The main navigation also has a working three-line toggle on desktop and mobile.
+Collapsing a panel does not reset its controls, selected site or playback.
 
 ## NASA imagery and provenance
 
@@ -177,7 +196,8 @@ python scripts/verify_ephemeris_spice.py --kernel-dir /path/to/kernels --output 
 
 - `npm run test:api`: frontend geometry, endpoint adaptation, independent site
   selection, frame validation, horizontal camera fitting, free-zoom triggers,
-  marker anchoring/pixel size, playback and saved camera/preferences.
+  marker anchoring/pixel size, original NASA terrain preservation, bounded panel
+  resizing, playback and saved camera/preferences.
 - `python -m pytest tests/ -q`: backend regression and new endpoint tests comparing
   global vectors with the same site's local visibility, fractional UTC and coverage.
 - `npm run test:shaders`: optional Python 3, Pillow and Mesa EGL/OpenGL ES 3 check.
